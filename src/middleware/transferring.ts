@@ -1,3 +1,4 @@
+import { protectDataOperation } from '../controllers/dataAccess';
 import Big from 'big.js';
 import { BillData, HistoryData, ResultOfExecution, TransferData, accountsData } from "../../main";
 import { getAllFile } from "../controllers/searchData";
@@ -115,7 +116,7 @@ export const incomeTransaction = async (
 	}
 };
 
-export const transferBetweenBills = async (data: TransferData): Promise<ResultOfExecution> => {
+const transferBetweenBillsImpl = async (data: TransferData): Promise<ResultOfExecution> => {
 	if (data.fromBillId === data.toBillId) {
 		return { status: 'error', error: new Error('Cannot transfer to the same bill') };
 	}
@@ -179,3 +180,5 @@ export const transferBetweenBills = async (data: TransferData): Promise<ResultOf
 		return { status: 'error', error: error instanceof Error ? error : new Error(`Error tranfer berween bills: ${String(error)}`) }
 	}
 };
+
+export const transferBetweenBills = protectDataOperation(transferBetweenBillsImpl);

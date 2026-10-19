@@ -5,6 +5,9 @@ import { getCurrencyGroups } from './src/middleware/otherFunc';
 // import { getAdditionalData } from './src/controllers/searchData';
 import { generateYearlyFile } from './src/controllers/DB';
 import { exportHistoryCsv } from './src/controllers/exportData';
+import { DEFAULT_BACKUP_FOLDER, recoverInterruptedRestore } from './src/controllers/backupData';
+import { addBackupSettings } from './src/view/backupSettings';
+import { assertDataAvailable, withDataAccess } from './src/controllers/dataAccess';
 
 const FINANCIAL_ACCOUNTING_VIEW = "financial-accounting-view";
 const { year } = getDate();
@@ -163,7 +166,13 @@ export default class MainPlugin extends Plugin {
 	async onload(): Promise<void> {
 		MainPlugin.instance = this;
 
-		await this.loadSettings();
+		try {
+            if (await recoverInterruptedRestore(this)) new Notice('Interrupted restore recovered. Your previous financial data is intact.', 10000);
+        } catch (error) {
+            new Notice('Financial Accounting recovery failed. No finance views were opened. Keep the backup files and restart Obsidian to retry.', 15000);
+            throw error;
+        }
+        await this.loadSettings();
 
 		this.registerView(
 			FINANCIAL_ACCOUNTING_VIEW,
@@ -241,7 +250,7 @@ export default class MainPlugin extends Plugin {
 		if (loaded == null) await this.saveSettings();
 	}
 	async saveSettings(): Promise<void> {
-		await this.saveData(this.settings);
+		await withDataAccess(() => this.saveData(this.settings));
 	}
 
 	get dbPath(): string {
@@ -288,6 +297,7 @@ export class FinancialAccountingView extends ItemView {
 }
 
 class DefaultSettings {
+	backupFolder = DEFAULT_BACKUP_FOLDER;
 	startYear: number;
 	baseCurrency: string;
 	constructor() {
@@ -311,6 +321,8 @@ class SettingsTab extends PluginSettingTab {
 			.setName("Preferences")
 			.setHeading();
 
+		addBackupSettings(containerEl, this.plugin, () => this.display());
+
 		// Selecting the initial year of accounting
 		new Setting(containerEl)
 			.setName("Initial year of accounting")
@@ -324,6 +336,7 @@ class SettingsTab extends PluginSettingTab {
 				drop.setValue(String(this.plugin.settings.startYear));
 
 				drop.onChange(async (value) => {
+					try { assertDataAvailable(); } catch (error) { new Notice((error as Error).message); return; }
 					this.plugin.settings.startYear = Number(value);
 					await this.plugin.saveSettings();
 					await generateYearlyFile();
@@ -420,6 +433,7 @@ async function SelectingTheBaseCurrency({ event, plugin }: { event: Event; plugi
 		// 	return { status: 'error', error: new Error(`General balance bill "${bill.name}" has currency ${bill.currency}`) };
 		// }
 
+		assertDataAvailable();
 		plugin.settings.baseCurrency = newCurrency;
 		await plugin.saveSettings().catch(console.error);
 		new Notice(`Base currency changed to ${newCurrency}`);

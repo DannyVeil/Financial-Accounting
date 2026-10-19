@@ -14,6 +14,7 @@ Track personal income, expenses, and account balances inside [Obsidian](https://
 - **Local storage:** financial records are saved as JSON files in your vault's configuration folder.
 - **Reusable notes:** select a previously used note for the current category when the note field is empty.
 - **CSV export:** export operation history for all years and currencies from plugin settings to a new CSV file in the vault root, including category and account names with emoji.
+- **Full JSON backups:** save all accounts, categories, years and settings in a configurable vault folder. Restore a validated backup with a safety copy and recovery after interrupted writes.
 
 Requires **Obsidian 1.8.0 or later**. The plugin supports desktop and mobile layouts. The account section is titled **Accounts**; some internal names still use **Bills**.
 
@@ -117,6 +118,18 @@ Plugin settings are saved separately in `data.json` in the plugin folder. A cust
 
 **Include the plugin's `db` folder and `data.json` in your backups.** These are plain JSON files, not encrypted by the plugin or stored as Markdown notes. Back them up before uninstalling the plugin or replacing its folder; copying only your notes will not preserve these records. When updating manually, replace the release files and retain your data files.
 
+## Backup and restore
+
+Open **Settings → Financial Accounting → Backup and restore**. The default folder is **Financial Accounting Backups** in the vault root. To change it, enter a visible vault-relative folder and select **Save folder**. Existing backups stay in their original folder.
+
+**Create backup** saves one complete JSON file, for example `financial-accounting-backup-2026-10-19_14-35-22.json`. Names use local time; collisions receive a numeric suffix. Each copy contains all accounts and their balances, categories, all recorded years, settings, original IDs, creation time, plugin version and backup format version. The saved file is read back and verified. Existing copies are never overwritten or automatically deleted.
+
+**Restore backup** lets you select a JSON file from the configured folder or from your device. After validation, review its date and record counts and explicitly confirm replacement. This replaces the full dataset and settings; it does not merge records or replay transactions against balances. Current year files absent from the backup are removed. The finance panel may generate empty years required by the restored initial-year setting when reopened.
+
+Before replacement, a verified `financial-accounting-before-restore-…json` safety copy is saved in the current backup folder. If this fails, the restore does not start. If replacement fails, the previous files and settings are restored. A recovery journal retained after interruption allows the next plugin startup to retry rollback before opening financial views. If recovery itself fails, the plugin stops loading; retain the journal and safety copy and resolve the storage error before restarting.
+
+Backups are plain JSON and contain private financial data. A copy in the same vault protects against accidental changes, but not loss of the vault or disk: copy the backup folder to another device or your separately configured backup service.
+
 ## Current limitations
 
 - No exchange-rate feed, automatic conversion, or combined total across currencies.
@@ -144,9 +157,9 @@ For development, `npm run dev` watches the TypeScript source and writes `main.js
 
 ### Checks before publishing
 
-`npm test` runs isolated tests against an in-memory vault: first launch without settings or database, reopening without data loss, currency filtering, category totals, operation creation/editing/deletion, same- and cross-currency transfers, exact decimal arithmetic, invalid amounts, and transfer write failures. Tests do not touch your financial records.
+`npm test` runs isolated tests against an in-memory vault: first launch without settings or database, reopening without data loss, currency filtering, category totals, operation creation/editing/deletion, same- and cross-currency transfers, exact decimal arithmetic, invalid amounts, transfer write failures, CSV export, backup validation and round trips, safety-copy failures, restore rollback, startup recovery, and backup concurrency protection. Tests do not touch your financial records.
 
-These tests mock the Obsidian API. Before a release, also check the interface in an actual desktop and mobile vault: create the first account and category, switch currencies and months, use all three operation tabs, and verify the layout in light and dark themes.
+These tests mock the Obsidian API. Before a release, also check the interface in an actual desktop and mobile vault: create the first account and category, switch currencies and months, use all three operation tabs, and verify the layout in light and dark themes. In a test vault, also create a backup, review and cancel a restore, restore a backup, and choose a JSON file from the device.
 
 Do not include `data.json` or `db/` in a release. Keep the package version, manifest version, and `versions.json` consistent when publishing a new version.
 

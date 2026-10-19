@@ -1,3 +1,4 @@
+import { protectDataOperation } from './dataAccess';
 import { getAllFile } from "./searchData";
 import { checkBill, validateHistory } from "../middleware/checkData";
 import { updateFile } from "../controllers/editingData";
@@ -5,7 +6,7 @@ import { expenditureTransaction, incomeTransaction } from "../middleware/transfe
 import { HistoryData, PlanData, BillData, ResultOfExecution, stateManager, YearData, categoriesData, accountsData } from "../../main";
 import { getDate } from '../middleware/otherFunc';
 
-export const addJsonToHistory = async (data: HistoryData): Promise<ResultOfExecution> => {
+const addJsonToHistoryImpl = async (data: HistoryData): Promise<ResultOfExecution> => {
 	const validation = await validateHistory(data);
 	if (validation.status === 'error') return validation;
 	if (data.type === 'expense') {
@@ -46,7 +47,7 @@ export const addJsonToHistory = async (data: HistoryData): Promise<ResultOfExecu
 	}
 }
 
-export const addJsonToPlan = async (data: PlanData): Promise<ResultOfExecution> => {
+const addJsonToPlanImpl = async (data: PlanData): Promise<ResultOfExecution> => {
 	const additionalData = await getAllFile<categoriesData>('categories');
 	if (additionalData.status === 'error') return { status: 'error', error: additionalData.error };
 
@@ -68,7 +69,7 @@ export const addJsonToPlan = async (data: PlanData): Promise<ResultOfExecution> 
 	}
 }
 
-export const addJsonToBills = async (data: BillData): Promise<ResultOfExecution> => {
+const addJsonToBillsImpl = async (data: BillData): Promise<ResultOfExecution> => {
 	if (data.balance === '') {
 		data.balance = '0'
 	}
@@ -87,3 +88,9 @@ export const addJsonToBills = async (data: BillData): Promise<ResultOfExecution>
 		return { status: 'error', error: error instanceof Error ? error : new Error(`Error creating bills: ${String(error)}`) }
 	}
 }
+
+export const addJsonToHistory = protectDataOperation(addJsonToHistoryImpl);
+
+export const addJsonToPlan = protectDataOperation(addJsonToPlanImpl);
+
+export const addJsonToBills = protectDataOperation(addJsonToBillsImpl);

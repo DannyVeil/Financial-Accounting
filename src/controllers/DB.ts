@@ -1,7 +1,8 @@
+import { protectDataOperation } from './dataAccess';
 import MainPlugin from "../../main";
 import { ResultOfExecution } from "../../main";
 
-export const initDB = async (): Promise<ResultOfExecution> => {
+const initDBImpl = async (): Promise<ResultOfExecution> => {
     const accountsFilePath = `${MainPlugin.instance.dbPath}/accounts.json`;
     const categoriesFilePath = `${MainPlugin.instance.dbPath}/categories.json`;
 
@@ -27,7 +28,7 @@ export const initDB = async (): Promise<ResultOfExecution> => {
     }
 }
 
-export const generateYearlyFile = async (): Promise<ResultOfExecution> => {
+const generateYearlyFileImpl = async (): Promise<ResultOfExecution> => {
     const { startYear } = MainPlugin.instance.settings;
 
     try {
@@ -62,3 +63,7 @@ export const generateYearlyFile = async (): Promise<ResultOfExecution> => {
         return { status: 'error', error: error instanceof Error ? error : new Error(`Error in generateYearlyFile: ${String(error)}`)}
     }
 }
+
+export const initDB = protectDataOperation(initDBImpl);
+
+export const generateYearlyFile = protectDataOperation(generateYearlyFileImpl);

@@ -1,3 +1,4 @@
+import { protectDataOperation } from './dataAccess';
 import { getAllFile } from "./searchData";
 import { updateFile } from "./editingData";
 import { checkForDeletionData } from "../middleware/checkData";
@@ -5,7 +6,7 @@ import { HistoryData, PlanData, BillData, ResultOfExecution, stateManager, YearD
 import { getDate } from '../middleware/otherFunc';
 import { expenditureTransaction, incomeTransaction } from "../middleware/transferring"
 
-export const deleteHistory = async (element: HistoryData): Promise<ResultOfExecution> => {
+const deleteHistoryImpl = async (element: HistoryData): Promise<ResultOfExecution> => {
 	const { selectedYear, selectedMonth } = stateManager();
 	const { year, month } =
 		selectedYear && selectedMonth
@@ -38,7 +39,7 @@ export const deleteHistory = async (element: HistoryData): Promise<ResultOfExecu
 	}
 }
 
-export const deletePlan = async (data: PlanData): Promise<ResultOfExecution> => {
+const deletePlanImpl = async (data: PlanData): Promise<ResultOfExecution> => {
 	if (await checkForDeletionData(data.id, 'plan')) return { status: 'error', error: new Error(`The category ${data.emoji} • ${data.name} cannot be deleted because it is used in history.`) }
 
 	const additionalData = await getAllFile<categoriesData>('categories');
@@ -65,7 +66,7 @@ export const deletePlan = async (data: PlanData): Promise<ResultOfExecution> => 
 	}
 }
 
-export const deleteBill = async (item: BillData): Promise<ResultOfExecution> => {
+const deleteBillImpl = async (item: BillData): Promise<ResultOfExecution> => {
 	const { id, name, emoji } = item;
 	if (!id) return { status: 'error', error: new Error('Element not found') }
 
@@ -86,3 +87,9 @@ export const deleteBill = async (item: BillData): Promise<ResultOfExecution> => 
 		return { status: 'error', error: error instanceof Error ? error : new Error(`Error checking for deletion: ${String(error)}`) }
 	}
 }
+
+export const deleteHistory = protectDataOperation(deleteHistoryImpl);
+
+export const deletePlan = protectDataOperation(deletePlanImpl);
+
+export const deleteBill = protectDataOperation(deleteBillImpl);

@@ -1,3 +1,4 @@
+import { protectDataOperation } from './dataAccess';
 import { getAllFile } from "./searchData";
 import { getDate, normalizeMoneyField } from "../middleware/otherFunc";
 import { checkBill, validateHistory } from "../middleware/checkData";
@@ -5,7 +6,7 @@ import { expenditureTransaction, incomeTransaction } from "../middleware/transfe
 import { HistoryData, PlanData, BillData, ResultOfExecution, stateManager, accountsData, categoriesData, YearData, PlanDataWithoutAmount } from "../../main";
 import MainPlugin from "../../main";
 
-export const editingJsonToHistory = async (data: HistoryData, oldData: HistoryData): Promise<ResultOfExecution> => {
+const editingJsonToHistoryImpl = async (data: HistoryData, oldData: HistoryData): Promise<ResultOfExecution> => {
     const validation = await validateHistory(data);
     if (validation.status === 'error') return validation;
     if(data.type === 'expense') {
@@ -44,7 +45,7 @@ export const editingJsonToHistory = async (data: HistoryData, oldData: HistoryDa
     }
 }
 
-export const editingJsonToPlan = async (data: PlanData): Promise<ResultOfExecution> => {
+const editingJsonToPlanImpl = async (data: PlanData): Promise<ResultOfExecution> => {
     const allCategories = await getAllFile<categoriesData>('categories');
     if (allCategories.status === 'error') return { status: 'error', error: allCategories.error };
     
@@ -67,7 +68,7 @@ export const editingJsonToPlan = async (data: PlanData): Promise<ResultOfExecuti
     }
 }
 
-export const editingJsonToBill = async (data: BillData): Promise<ResultOfExecution> => {
+const editingJsonToBillImpl = async (data: BillData): Promise<ResultOfExecution> => {
     if (data.balance === '') {
         data.balance = '0'
     }
@@ -102,3 +103,9 @@ export const updateFile = async (file: string, data: BillData[] | HistoryData[] 
         return { status: 'error', error: error instanceof Error ? error : new Error(`Error update data: ${String(error)}`) };
     }
 }
+
+export const editingJsonToHistory = protectDataOperation(editingJsonToHistoryImpl);
+
+export const editingJsonToPlan = protectDataOperation(editingJsonToPlanImpl);
+
+export const editingJsonToBill = protectDataOperation(editingJsonToBillImpl);
