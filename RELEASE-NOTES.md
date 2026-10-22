@@ -1,18 +1,19 @@
-# Financial Accounting 1.0.5
+# Financial Accounting 1.0.6
 
-## Maintenance update and legacy backup compatibility
+## Global History Search
 
-- Fixed backup creation and restoration for older operations whose dates contain only a calendar date (for example, `2026-10-19`). These dates are preserved without adding a time.
-- Improved backup validation messages to identify the file, month, operation and invalid date.
-- Reorganized the home, history, accounts, plans and navigation code into separate modules, and simplified backup, export and data-access code for easier maintenance.
-- Reordered plugin preferences for clearer navigation.
-- Added regression coverage for legacy backup dates, home category charts and month navigation.
+- Added **All history** beside the search field to find operations across every recorded year, including personal notes from previous years.
+- Search by note, account, category, amount, or transaction type in the selected currency. Switch back to the selected month without losing your query.
+- Search is now available even when the selected month has no operations.
+- Global results load in groups of 100. **Show more** appears only while additional matches remain; monthly history continues to display all results.
+- Fixed editing and deletion of operations found in other months so changes apply to the original period. Editing older date-only records preserves their date format.
+- Added year labels to history dates and styled **Show more** with the theme's accent color and spacing above the button.
 
-Requires Obsidian 1.8.0 or later. Backup format remains version 1; no manual data conversion is required. CSV import remains disabled in this release.
+Requires **Obsidian 1.8.0 or later**. No data migration is required. The backup format remains unchanged.
 
 ## Release files
 
-Publish the following files from `dist` under the tag `1.0.5`:
+Publish these files from `dist` under the tag `1.0.6`:
 
 - `main.js`
 - `manifest.json`
@@ -20,4 +21,4 @@ Publish the following files from `dist` under the tag `1.0.5`:
 - `LICENSE-TWEMOJI.txt`
 - `TWEMOJI-NOTICE.md`
 
-Do not include `db/`, `data.json`, or personal backup files in the release.
+Do not include `db/`, `data.json`, or personal backup files.

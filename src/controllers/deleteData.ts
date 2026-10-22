@@ -2,16 +2,18 @@ import { protectDataOperation } from './dataAccess';
 import { getAllFile } from "./searchData";
 import { updateFile } from "./editingData";
 import { checkForDeletionData } from "../middleware/checkData";
-import { HistoryData, PlanData, BillData, ResultOfExecution, stateManager, YearData, categoriesData, PlanDataWithoutAmount, accountsData } from "../../main";
-import { getDate } from '../middleware/otherFunc';
+import { HistoryData, PlanData, BillData, ResultOfExecution, YearData, categoriesData, PlanDataWithoutAmount, accountsData } from "../../main";
 import { expenditureTransaction, incomeTransaction } from "../middleware/transferring"
 
 const deleteHistoryImpl = async (element: HistoryData): Promise<ResultOfExecution> => {
-	const { selectedYear, selectedMonth } = stateManager();
-	const { year, month } =
-		selectedYear && selectedMonth
-			? { year: selectedYear, month: selectedMonth }
-			: getDate();
+	const year = element.date.slice(0, 4);
+    const month = String(Number(element.date.slice(5, 7)));
+    const stored = await getAllFile<YearData>(year);
+    if (stored.status === 'error') return stored;
+    if (!stored.json.months[month]?.history.some(item => item.id === element.id)) {
+        return { status: 'error', error: new Error('Operation no longer exists. Reopen history.') };
+    }
+
 
 	if (element.type === 'expense') {
 		const result = await expenditureTransaction(element, 'remove')

@@ -1,3 +1,5 @@
+import { withDataAccess } from './dataAccess';
+import type { YearData } from '../../main';
 import { Notice } from "obsidian";
 import Big from "big.js";
 import { stateManager, DataFileResult, HistoryData, PlanData, BillData, DataItemResult, ResultOfAllData, categoriesData, accountsData, PlanDataWithoutAmount } from "../../main";
@@ -239,3 +241,37 @@ export const searchHistory = async (
         return { status: 'error', error: err instanceof Error ? err : new Error(String(err)) };
     }
 };
+
+/** Read every year in the active currency without changing the selected month. */
+export async function loadAllHistory(currency: string): Promise<HistoryData[]> {
+    return withDataAccess(async () => {
+        const plugin = MainPlugin.instance;
+        const listing = await plugin.app.vault.adapter.list(plugin.dbPath);
+        const years: string[] = [];
+
+        for (const path of listing.files) {
+            const match = /(?:^|\/)(\d{4})\.json$/.exec(path);
+            if (match) {
+                years.push(match[1]);
+            }
+        }
+
+        const history: HistoryData[] = [];
+        for (const year of years.sort()) {
+            const result = await getAllFile<YearData>(year);
+            if (result.status === 'error') {
+                throw result.error;
+            }
+
+            for (const month of Object.values(result.json.months)) {
+                for (const operation of month.history) {
+                    if (operation.currency === currency) {
+                        history.push(operation);
+                    }
+                }
+            }
+        }
+
+        return history.sort((first, second) => second.date.localeCompare(first.date));
+    });
+}

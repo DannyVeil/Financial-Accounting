@@ -11,7 +11,7 @@ import { transferBetweenBills } from '../middleware/transferring'
 import { generationHistoryContent } from './historyView';
 import { fillMonthDates, getCurrencySymbol, formatNumbers } from '../middleware/otherFunc';
 
-export const editingHistory = async (e: MouseEvent) => {
+export const editingHistory = async (e: MouseEvent, operation?: HistoryData) => {
 	if (!(e.target instanceof HTMLElement)) return;
 
 	const li = e.target.closest('li');
@@ -28,7 +28,7 @@ export const editingHistory = async (e: MouseEvent) => {
 		console.error(expensePlan.error)
 		return
 	}
-	if (expensePlan.jsonData.length === 0) return new Notice('Add a expenditure plan')
+
 
 	const incomePlan = await getAdditionalData<PlanData>('categories', 'income_plan')
 	if (incomePlan.status === 'error') {
@@ -36,9 +36,9 @@ export const editingHistory = async (e: MouseEvent) => {
 		console.error(incomePlan.error)
 		return
 	}
-	if (incomePlan.jsonData.length === 0) return new Notice('Add a income plan')
 
-	const history = await searchElementById<HistoryData>(id, 'history') as DataItemResult<HistoryData>;
+
+	const history: DataItemResult<HistoryData> = operation ? { status: 'success', item: operation } : await searchElementById<HistoryData>(id, 'history') as DataItemResult<HistoryData>;
 	if (history.status === 'error') {
 		new Notice(history.error.message)
 		console.error(history.error)
@@ -295,7 +295,7 @@ export const editingHistory = async (e: MouseEvent) => {
 				id: selectCategory.value
 			},
 			comment: commentInput.value,
-			date: `${selectDate.value}T${history.item.date.split('T')[1]}`,
+			date: selectDate.value + (history.item.date.includes('T') ? 'T' + history.item.date.split('T')[1] : ''),
 			type: history.item.type,
 		}
 

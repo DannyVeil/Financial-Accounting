@@ -1,9 +1,9 @@
 {
 	"id": "financial-accounting",
 	"name": "Financial Accounting",
-	"version": "1.0.5",
+	"version": "1.0.6",
 	"minAppVersion": "1.8.0",
-	"description": "Financial control system directly without internet connection.",
+	"description": "Track income, expenses and accounts offline, search your history, and back up your financial records.",
 	"author": "Bugayev Daniil",
 	"authorUrl": "https://github.com/DannyVeil",
 	"isDesktopOnly": false

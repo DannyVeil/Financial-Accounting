@@ -5,7 +5,7 @@ Track personal income, expenses, and account balances inside [Obsidian](https://
 ## Features
 
 - **Finance dashboard:** review your balance, income and expense summaries, and a monthly expense chart. Select chart categories to inspect the related operations.
-- **Transaction history:** record income and expenses with an account, category, date, and optional note. Search the selected month by amount, transaction type, account, category, or note.
+- **Transaction history:** record income and expenses with an account, category, date, and optional note. Search the selected month or enable **All history** to find operations across all years by amount, transaction type, account, category, or personal note. Search remains available in empty months.
 - **Categories:** organize income and expenses with names and emoji<!-- , and optional parent categories -->. Review totals calculated from recorded transactions.
 - **Currency switching:** view one currency at a time. The header selector filters accounts, history, category totals, charts, and statistics without converting or adding different currencies together.
 - **Multiple accounts:** track cash, cards, and other balances. Choose which accounts contribute to the general balance and archive accounts you no longer use.
@@ -80,11 +80,21 @@ Income and expenses use the currency of the selected account. Switch the currenc
 | Section | What you can do |
 | --- | --- |
 | Home | Review balance and summary cards, explore the expense chart, and inspect category breakdowns and filtered operations. |
-| History | Browse the selected month's operations grouped by day, search them, and open entries for editing. |
+| History | Browse operations grouped by day, search the selected month or all years, and open entries for editing. |
 | Categories | Review monthly income and expense totals by category, edit category details, and archive or restore categories. |
 | Accounts | Review account balances, edit account details, and archive or restore accounts. |
 
 Use the month selector at the top of the panel to open the calendar and choose a period. Use the adjacent flag-and-currency button to change currency without changing the selected month or section. The selection lasts for the current plugin session. Account balances represent current balances, including when you browse an earlier month.
+
+### Searching operation history
+
+Use the search field in **History** to match notes, account names, category names, amounts, or the words `income` and `expense`. Search normally uses the month selected in the header.
+
+Enable **All history** next to the search field to search every recorded year in the selected currency, including personal notes from previous years. The selected month does not change. Disable **All history** to return to that month's results; your search text stays in place.
+
+Global results show the first 100 matching operations. **Show more** reveals another 100 and disappears when all matches are visible. Changing the query starts again with the first 100 matches. Monthly history is shown in full without this button. Search remains available even if the selected month has no operations.
+
+Open a result to edit or delete it in its original month. Older records with dates that do not include a time retain that format when edited.
 
 ### Transfers between accounts
 

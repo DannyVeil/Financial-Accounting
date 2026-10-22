@@ -1,14 +1,14 @@
 {
 	"name": "financial-accounting",
-	"version": "1.0.5",
-	"description": "Financial control system directly in Obsidian without an internet connection.",
+	"version": "1.0.6",
+	"description": "Track income, expenses and accounts offline, search your history, and back up your financial records.",
 	"main": "dist/main.js",
 	"scripts": {
 		"dev": "node dev.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"version": "node version-bump.mjs",
 		"test:currency-filter": "node tests/currency-filter.test.cjs",
-		"test": "node tests/first-run.test.cjs && node tests/currency-filter.test.cjs && node tests/transactions.test.cjs && node tests/export.test.cjs && node tests/backup.test.cjs && node tests/home-categories.test.cjs && node tests/finance-shell.test.cjs"
+		"test": "node tests/first-run.test.cjs && node tests/currency-filter.test.cjs && node tests/transactions.test.cjs && node tests/export.test.cjs && node tests/backup.test.cjs && node tests/home-categories.test.cjs && node tests/finance-shell.test.cjs && node tests/history-search.test.cjs"
 	},
 	"keywords": [],
 	"author": "Bugayev Daniil",

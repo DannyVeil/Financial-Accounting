@@ -1,9 +1,9 @@
 import { protectDataOperation } from './dataAccess';
 import { getAllFile } from "./searchData";
-import { getDate, normalizeMoneyField } from "../middleware/otherFunc";
+import { normalizeMoneyField } from "../middleware/otherFunc";
 import { checkBill, validateHistory } from "../middleware/checkData";
 import { expenditureTransaction, incomeTransaction } from "../middleware/transferring";
-import { HistoryData, PlanData, BillData, ResultOfExecution, stateManager, accountsData, categoriesData, YearData, PlanDataWithoutAmount } from "../../main";
+import { HistoryData, PlanData, BillData, ResultOfExecution, accountsData, categoriesData, YearData, PlanDataWithoutAmount } from "../../main";
 import MainPlugin from "../../main";
 
 const editingJsonToHistoryImpl = async (data: HistoryData, oldData: HistoryData): Promise<ResultOfExecution> => {
@@ -14,11 +14,17 @@ const editingJsonToHistoryImpl = async (data: HistoryData, oldData: HistoryData)
         if(resultCheckBill.status === 'error') return { status: 'error', error: resultCheckBill.error }
     }
 
-    const { selectedYear, selectedMonth } = stateManager();
-    const { year, month } =
-    selectedYear && selectedMonth
-        ? { year: selectedYear, month: selectedMonth }
-        : getDate();
+    const year = oldData.date.slice(0, 4);
+    const month = String(Number(oldData.date.slice(5, 7)));
+    const stored = await getAllFile<YearData>(year);
+    if (stored.status === 'error') return stored;
+    if (!stored.json.months[month]?.history.some(item => item.id === oldData.id)) {
+        return { status: 'error', error: new Error('Operation no longer exists. Reopen history.') };
+    }
+    if (data.date.slice(0, 7) !== oldData.date.slice(0, 7)) {
+        return { status: 'error', error: new Error('Select a date within the original month.') };
+    }
+
 
     if(data.type === 'expense') {
         const result = await expenditureTransaction(data, 'edit', oldData)

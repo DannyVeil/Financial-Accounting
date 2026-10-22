@@ -61,7 +61,9 @@ export function fillMonthDates(selectEl: HTMLSelectElement, oldDate?: string) {
 		"January", "February", "March", "April", "May", "June",
 		"July", "August", "September", "October", "November", "December"
 	];
-	const { selectedYear, selectedMonth } = stateManager();
+	const { selectedYear, selectedMonth } = oldDate
+        ? { selectedYear: oldDate.slice(0, 4), selectedMonth: String(Number(oldDate.slice(5, 7))) }
+        : stateManager();
 
 	if (selectedYear === null && selectedMonth === null) {
 		const today: Date = new Date();
