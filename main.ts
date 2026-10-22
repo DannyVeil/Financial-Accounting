@@ -1,5 +1,5 @@
 import { Plugin, ItemView, WorkspaceLeaf, Platform, PluginSettingTab, Setting, Notice, App, Modal } from 'obsidian';
-import { showInitialView, showAnotherInitialView } from './src/view/homeView';
+import { showInitialView, showAnotherInitialView } from './src/view/initialView';
 import { getDate } from './src/middleware/otherFunc';
 import { getCurrencyGroups } from './src/middleware/otherFunc';
 // import { getAdditionalData } from './src/controllers/searchData';
@@ -7,6 +7,8 @@ import { generateYearlyFile } from './src/controllers/DB';
 import { exportHistoryCsv } from './src/controllers/exportData';
 import { DEFAULT_BACKUP_FOLDER, recoverInterruptedRestore } from './src/controllers/backupData';
 import { addBackupSettings } from './src/view/backupSettings';
+// import { ImportHistoryModal } from './src/view/importSettings';
+// import { recoverInterruptedImport } from './src/controllers/importData';
 import { assertDataAvailable, withDataAccess } from './src/controllers/dataAccess';
 
 const FINANCIAL_ACCOUNTING_VIEW = "financial-accounting-view";
@@ -167,6 +169,7 @@ export default class MainPlugin extends Plugin {
 		MainPlugin.instance = this;
 
 		try {
+            // if (await recoverInterruptedImport(this)) new Notice('Interrupted history import rolled back.');
             if (await recoverInterruptedRestore(this)) new Notice('Interrupted restore recovered. Your previous financial data is intact.', 10000);
         } catch (error) {
             new Notice('Financial Accounting recovery failed. No finance views were opened. Keep the backup files and restart Obsidian to retry.', 15000);
@@ -321,29 +324,6 @@ class SettingsTab extends PluginSettingTab {
 			.setName("Preferences")
 			.setHeading();
 
-		addBackupSettings(containerEl, this.plugin, () => this.display());
-
-		// Selecting the initial year of accounting
-		new Setting(containerEl)
-			.setName("Initial year of accounting")
-			.setDesc("Select the year from which financial accounting has been conducted")
-			.addDropdown((drop) => {
-				const currentYear = new Date().getFullYear();
-				for (let year = currentYear - 100; year <= currentYear; year++) {
-					drop.addOption(String(year), String(year));
-				}
-
-				drop.setValue(String(this.plugin.settings.startYear));
-
-				drop.onChange(async (value) => {
-					try { assertDataAvailable(); } catch (error) { new Notice((error as Error).message); return; }
-					this.plugin.settings.startYear = Number(value);
-					await this.plugin.saveSettings();
-					await generateYearlyFile();
-					new Notice(`The starting year has been changed to ${value}`);
-				});
-			});
-
 		// Selecting the base currency
 		const settingEl = new Setting(containerEl)
 			.setName("Main currency")
@@ -386,6 +366,34 @@ class SettingsTab extends PluginSettingTab {
 				result.catch(console.error);
 			}
 		});
+
+		// Selecting the initial year of accounting
+		new Setting(containerEl)
+			.setName("Initial year of accounting")
+			.setDesc("Select the year from which financial accounting has been conducted")
+			.addDropdown((drop) => {
+				const currentYear = new Date().getFullYear();
+				for (let year = currentYear - 100; year <= currentYear; year++) {
+					drop.addOption(String(year), String(year));
+				}
+
+				drop.setValue(String(this.plugin.settings.startYear));
+
+				drop.onChange(async (value) => {
+					try { assertDataAvailable(); } catch (error) { new Notice((error as Error).message); return; }
+					this.plugin.settings.startYear = Number(value);
+					await this.plugin.saveSettings();
+					await generateYearlyFile();
+					new Notice(`The starting year has been changed to ${value}`);
+				});
+			});
+
+		addBackupSettings(containerEl, this.plugin, () => this.display());
+
+// 		new Setting(containerEl)
+// 			.setName('Import operation history')
+// 			.setDesc('Import CSV into an existing account. Current balances remain unchanged.')
+// 			.addButton(button => button.setButtonText('Import CSV').onClick(() => new ImportHistoryModal(this.plugin).open()));
 
 		new Setting(containerEl)
 			.setName('Export operation history')

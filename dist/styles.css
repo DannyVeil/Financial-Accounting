@@ -1329,4 +1329,31 @@
   display: none;
 }
 
+/* CSV history import disabled.
+.finance-import-modal {
+  width: min(1100px, 95vw);
+}
+.finance-import-table {
+  overflow: auto;
+  max-height: 50vh;
+}
+.finance-import-table table {
+  width: 100%;
+}
+.finance-import-table th, .finance-import-table td {
+  padding: 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+.finance-import-table td {
+  max-width: 280px;
+  overflow-wrap: anywhere;
+}
+.finance-import-sample {
+  overflow: auto;
+  max-height: 140px;
+}
+
+*/
+
 /*# sourceMappingURL=styles.css.map */

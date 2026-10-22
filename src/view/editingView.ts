@@ -8,7 +8,7 @@ import { HistoryData, PlanData, BillData, TransferData, DataItemResult } from '.
 import { deleteBill, deletePlan, deleteHistory } from '../controllers/deleteData';
 import { editingJsonToHistory, editingJsonToPlan, editingJsonToBill } from '../controllers/editingData';
 import { transferBetweenBills } from '../middleware/transferring'
-import { generationHistoryContent } from './showDataView';
+import { generationHistoryContent } from './historyView';
 import { fillMonthDates, getCurrencySymbol, formatNumbers } from '../middleware/otherFunc';
 
 export const editingHistory = async (e: MouseEvent) => {

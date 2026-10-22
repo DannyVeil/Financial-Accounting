@@ -7,6 +7,7 @@ const esbuild = require('esbuild');
             export * from './src/controllers/addData'; export * from './src/controllers/editingData';
             export * from './src/controllers/deleteData'; export * from './src/middleware/transferring';
             export * from './src/middleware/checkData';
+            // export * from './src/controllers/importData';
             export { getAllFile, getMainData } from './src/controllers/searchData';
             export { formatNumbers } from './src/middleware/otherFunc';`, resolveDir: process.cwd(), loader: 'ts' },
         bundle: true, platform: 'node', format: 'cjs', write: false,
@@ -33,11 +34,18 @@ const esbuild = require('esbuild');
     };
     let failWrite = false;
     let writes = 0;
+    const rawFiles = new Map();
     const key = path => path.split('/').pop().replace('.json', '');
     plugin.app = { vault: { configDir: '.obsidian', adapter: {
         exists: async path => key(path) in files,
-        read: async path => JSON.stringify(files[key(path)]),
-        write: async (path, json) => { if (failWrite) throw Error('Disk unavailable'); writes++; files[key(path)] = JSON.parse(json); },
+        read: async path => {
+            const json = JSON.stringify(files[key(path)]);
+            const raw = rawFiles.get(key(path));
+            return raw && JSON.stringify(JSON.parse(raw)) === json ? raw : json;
+        },
+        write: async (path, json) => { if (failWrite) throw Error('Disk unavailable'); writes++; files[key(path)] = JSON.parse(json); rawFiles.set(key(path), json); },
+        rename: async (from, to) => { files[key(to)] = files[key(from)]; delete files[key(from)]; rawFiles.set(key(to), rawFiles.get(key(from))); rawFiles.delete(key(from)); },
+        remove: async path => { delete files[key(path)]; rawFiles.delete(key(path)); },
         list: async () => ({ files: [`${plugin.dbPath}/2026.json`], folders: [] }),
     } } };
     const balance = id => files.accounts.accounts.find(b => b.id === id).balance;
@@ -115,5 +123,20 @@ const esbuild = require('esbuild');
     failWrite = true;
     bad(await api.transferBetweenBills({ type: 'same-currency', fromBillId: 'usd', toBillId: 'usd2', amount: '1' }));
     assert.equal(JSON.stringify(files), snapshot);
+//     failWrite = false;
+//     plugin.settings.startYear = 2026;
+//     const beforeImport = balance('usd');
+//     assert.equal(await api.importHistory(plugin, 'usd', [{
+//         line: 2, date: '2026-10-20T00:00:00', amount: '5', type: 'expense',
+//         comment: 'Imported purchase', currency: 'USD', categoryId: 'food', included: true,
+//     }]), 1);
+//     assert.equal(balance('usd'), beforeImport, 'import must not change the current balance');
+//     const imported = files[2026].months[10].history.find(t => t.comment === 'Imported purchase');
+//     assert(!('historyOnly' in imported), 'import produces an ordinary operation');
+//     const changed = { ...imported, amount: '7' };
+//     ok(await api.editingJsonToHistory(changed, imported));
+//     assert.equal(balance('usd'), '78.75', 'editing imported expense applies the ordinary difference');
+//     ok(await api.deleteHistory(changed));
+//     assert.equal(balance('usd'), '85.75', 'deleting imported expense returns its amount as usual');
     console.log('Transaction, transfer, precision, validation and write-failure checks passed.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

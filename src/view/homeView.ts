@@ -1,738 +1,789 @@
-import { activeCurrency } from '../middleware/otherFunc';
-import currencies from '../../currencies.json';
-import flags from '../assets/currency-flags.json';
-import { setIcon, Notice, Menu } from "obsidian";
-import MainPlugin from "../../main";
-import { FinancialAccountingView } from '../../main'
-import { stateManager, BillData, PlanData } from "../../main";
-import { getDate, formatNumbers } from "../middleware/otherFunc";
-import { initDB, generateYearlyFile } from "../controllers/DB";
-import { showHistory, showPlans, showBills, showHome } from "./showDataView";
-import { getAdditionalData } from "../controllers/searchData";
-import { SummarizingDataForTheTrueBills, divideByRemainingDays, switchBalanceLine, SummarizingData, getCurrencySymbol, TheSumOfExpensesAndIncomeForTheYear, IncomeAndExpensesForTheMonth } from "../middleware/otherFunc";
-import { addHistory } from "../view/addView";
-
-async function renderFinanceHeader(page: 'home' | 'calendar' = 'home'): Promise<void> {
-	const { contentEl } = FinancialAccountingView.instance;
-	const { selectedMonth, selectedYear } = stateManager();
-	const currentDate = getDate();
-	const isCalendar = page === 'calendar';
-	const header = contentEl.createDiv({ cls: 'finance-header finance-header--currency' });
-
-	const backButton = header.createEl('button', {
-		cls: 'finance-back',
-		attr: { type: 'button', 'aria-label': 'Back', title: 'Back' },
-	});
-	setIcon(backButton, 'chevron-left');
-	backButton.disabled = !isCalendar && !selectedMonth;
-	backButton.addEventListener('click', () => {
-		if (!isCalendar) {
-			stateManager({ selectedMonth: null, selectedYear: null });
-		}
-		void FinancialAccountingView.instance.onOpen();
-	});
-
-	const monthLabels = [
-		'☃️ January', '🌨️ February', '🌷 March', '🌱 April',
-		'☀️ May', '🌳 June', '🏖️ July', '🌾 August',
-		'🍁 September', '🍂 October', '☔ November', '❄️ December',
-	];
-	const monthIndex = Number(selectedMonth ?? currentDate.month) - 1;
-	const yearLabel = selectedYear && selectedYear !== currentDate.year ? ' ' + selectedYear : '';
-	const monthButton = header.createEl('button', {
-		cls: 'finance-month',
-		attr: { type: 'button', 'aria-label': 'Select month' },
-	});
-	monthButton.createSpan({ text: monthLabels[monthIndex] + yearLabel });
-	monthButton.addEventListener('click', () => {
-		void showAllMonths();
-	});
-
-	const currencyButton = header.createEl('button', {
-		cls: 'finance-currency',
-		attr: {
-			type: 'button',
-			'aria-label': 'Select currency',
-			'aria-haspopup': 'menu',
-			title: 'Currency',
-		},
-	});
-	const label = currencyButton.createSpan({ cls: 'finance-currency-label' });
-	label.appendChild(currencyLabel(activeCurrency()));
-	const chevron = currencyButton.createSpan({ cls: 'finance-header-chevron' });
-	setIcon(chevron, 'chevron-down');
-
-	const accounts = await getAdditionalData<BillData>('accounts', undefined, true);
-	const currencyCodes = new Set([MainPlugin.instance.settings.baseCurrency, activeCurrency()]);
-	if (accounts.status === 'success') {
-		for (const account of accounts.jsonData) {
-			currencyCodes.add(account.currency);
-		}
-	} else {
-		new Notice(accounts.error.message);
-	}
-
-	currencyButton.addEventListener('click', event => {
-		const menu = new Menu();
-		for (const code of [...currencyCodes].sort()) {
-			menu.addItem(item => {
-				item.setTitle(currencyLabel(code));
-				item.setChecked(code === activeCurrency());
-				item.onClick(() => {
-					stateManager({ selectedCurrency: code });
-					if (isCalendar) {
-						void showAllMonths();
-					} else {
-						void FinancialAccountingView.instance.onOpen();
-					}
-				});
-			});
-		}
-		menu.showAtMouseEvent(event);
-	});
-}
-
-export const showInitialView = async (): Promise<void> => {
-	const initDBResult = await initDB();
-	if (initDBResult.status === "error") {
-		new Notice(initDBResult.error.message);
-		console.error(initDBResult.error);
-		return;
-	}
-
-	const generateYearlyFileResult = await generateYearlyFile();
-	if (generateYearlyFileResult.status === "error") {
-		new Notice(generateYearlyFileResult.error.message);
-		console.error(generateYearlyFileResult.error);
-		return;
-	}
-
-	if (!FinancialAccountingView.instance || !MainPlugin.instance) return;
-
-	stateManager({ selectedMonth: null, selectedYear: null });
-
-	const { contentEl } = FinancialAccountingView.instance;
-
-
-	contentEl.empty();
-	contentEl.addClass("finance-content");
-
-	await renderFinanceHeader();
-
-	contentEl.setAttribute("data-page", "home");
-
-	await homeButtons();
-}
-
-export const showInitialViewOld = async (): Promise<void> => {
-	const initDBResult = await initDB();
-	if (initDBResult.status === "error") {
-		new Notice(initDBResult.error.message);
-		console.error(initDBResult.error);
-		return;
-	}
-
-	const generateYearlyFileResult = await generateYearlyFile();
-	if (generateYearlyFileResult.status === "error") {
-		new Notice(generateYearlyFileResult.error.message);
-		console.error(generateYearlyFileResult.error);
-		return;
-	}
-
-	if (!FinancialAccountingView.instance || !MainPlugin.instance) return;
-
-	stateManager({ selectedMonth: null, selectedYear: null });
-
-	const { contentEl } = FinancialAccountingView.instance;
-	const { month } = getDate();
-
-	const bills = await getAdditionalData<BillData>('accounts');
-	if (bills.status === "error") {
-		new Notice(bills.error.message);
-		console.error(bills.error);
-		return
-	}
-
-	const expensePlan = await getAdditionalData<PlanData>('categories', 'expenditure_plan');
-	if (expensePlan.status === "error") {
-		new Notice(expensePlan.error.message);
-		console.error(expensePlan.error);
-		return
-	}
-
-	const incomePlan = await getAdditionalData<PlanData>('categories', 'income_plan');
-	if (incomePlan.status === "error") {
-		new Notice(incomePlan.error.message);
-		console.error(incomePlan.error);
-		return
-	}
-
-	contentEl.empty();
-	contentEl.addClass("finance-content");
-
-	const financeHeader = contentEl.createEl("div", {
-		cls: "finance-header",
-	});
-
-	const allMonths = [
-		"☃️ January",
-		"🌨️ February",
-		"🌷 March",
-		"🌱 April",
-		"☀️ May",
-		"🌳 June",
-		"🏖️ July",
-		"🌾 August",
-		"🍁 September",
-		"🍂 October",
-		"☔ November",
-		"❄️ December",
-	];
-	const showAllMonthsButton = financeHeader.createEl("button", {
-		attr: {
-			id: "showAllMonths",
-		},
-	});
-	showAllMonthsButton.createEl("span", {
-		text: allMonths[Number(month) - 1],
-	});
-
-	showAllMonthsButton.addEventListener("click", () => {
-		if (contentEl.dataset.page === "home") {
-			contentEl.setAttribute("data-page", "months");
-			void showAllMonths();
-		}
-	});
-
-	contentEl.setAttribute("data-page", "home");
-
-	const balance = contentEl.createEl("div", {
-		cls: "balance",
-	});
-
-	const balanceTop = balance.createEl("div", {
-		cls: "balance-top",
-	});
-
-	balanceTop.createEl("span", {
-		text: "Balance",
-	});
-
-	balanceTop.createEl("p", {
-		text: `${formatNumbers(SummarizingDataForTheTrueBills(bills.jsonData).toString())} ${getCurrencySymbol(activeCurrency())}`,
-	});
-
-	balanceTop.createEl("span", {
-		text: `~${formatNumbers(divideByRemainingDays(SummarizingDataForTheTrueBills(bills.jsonData)).toString())} for a day`,
-	});
-
-	const balanceLine = balance.createEl("div", {
-		cls: "balance-line",
-	});
-	balanceLine.style.setProperty("--after-width", `${switchBalanceLine(bills.jsonData, expensePlan.jsonData)}%`);
-
-	const balanceBody = balance.createEl("div", {
-		cls: "balance-body",
-	});
-
-	const balanceExpenses = balanceBody.createEl("div", {
-		cls: "balance_body-expenses",
-	});
-
-	balanceExpenses.createEl("span", {
-		text: "Expense",
-	});
-
-	const balanceExpensesCheck = balanceExpenses.createEl("div", {
-		cls: "balance_expenses-check",
-	});
-
-	setIcon(balanceExpensesCheck, "upload");
-	balanceExpensesCheck.createEl("p", {
-		text: `${formatNumbers(SummarizingData(expensePlan.jsonData).toString())}`,
-	});
-
-	const balanceIncome = balanceBody.createEl("div", {
-		cls: "balance_body-income",
-	});
-
-	balanceIncome.createEl("span", {
-		text: "Income",
-	});
-
-	const balanceIncomeCheck = balanceIncome.createEl("div", {
-		cls: "balance_income-check",
-	});
-
-	setIcon(balanceIncomeCheck, "download");
-	balanceIncomeCheck.createEl("p", {
-		text: `${formatNumbers(SummarizingData(incomePlan.jsonData).toString())}`,
-	});
-
-	await homeButtons();
-}
-
-const homeButtons = async (): Promise<void> => {
-	const { contentEl } = FinancialAccountingView.instance;
-	const { openPageNow } = stateManager()
-
-	const homeNav = contentEl.createEl("div", {
-		cls: "home-nav",
-	});
-	const mainNav = homeNav.createEl("div", {
-		cls: "main-nav",
-	});
-	const addNav = homeNav.createEl("div", {
-		cls: "add-nav",
-	});
-	const mainContent = contentEl.createEl("div", {
-		cls: "main-content",
-	});
-
-	const addButton = addNav.createEl("a", {
-		attr: {
-			id: "add-button",
-			href: "#"
-		},
-	});
-	setIcon(addButton, "plus");
-	addButton.addEventListener("click", () => {
-		void addHistory();
-	})
-
-	const homeButton = mainNav.createEl("a", {
-		attr: {
-			id: "home-button",
-			href: "#"
-		},
-	});
-	setIcon(homeButton, "home");
-	homeButton.addEventListener("click", () => {
-		homeButton.addClass("home_button--active");
-		planButton.removeClass("home_button--active");
-		billsButton.removeClass("home_button--active");
-		historyButton.removeClass("home_button--active");
-		mainContent.empty();
-		void showHome(mainContent);
-	});
-
-	const historyButton = mainNav.createEl("a", {
-		attr: {
-			id: "history-button",
-			href: "#",
-		},
-	});
-	setIcon(historyButton, "list");
-	historyButton.addEventListener("click", () => {
-		historyButton.addClass("home_button--active");
-		homeButton.removeClass("home_button--active");
-		billsButton.removeClass("home_button--active");
-		planButton.removeClass("home_button--active");
-		mainContent.empty();
-		void showHistory(mainContent);
-	});
-
-	const planButton = mainNav.createEl("a", {
-		attr: {
-			id: "plan-button",
-			href: "#",
-		},
-	});
-	setIcon(planButton, "square-chart-gantt");
-	planButton.addEventListener("click", () => {
-		planButton.addClass("home_button--active");
-		homeButton.removeClass("home_button--active");
-		historyButton.removeClass("home_button--active");
-		billsButton.removeClass("home_button--active");
-		mainContent.empty();
-		void showPlans(mainContent);
-	});
-
-	const billsButton = mainNav.createEl("a", {
-		attr: {
-			id: "bills-button",
-			href: "#",
-		},
-	});
-	setIcon(billsButton, "wallet");
-	billsButton.addEventListener("click", () => {
-		billsButton.addClass("home_button--active");
-		homeButton.removeClass("home_button--active");
-		historyButton.removeClass("home_button--active");
-		planButton.removeClass("home_button--active");
-		mainContent.empty();
-		void showBills(mainContent);
-	});
-
-	if (!openPageNow || openPageNow === "Home" || openPageNow === null) {
-		void showHome(mainContent);
-		homeButton.addClass("home_button--active");
-		planButton.removeClass("home_button--active");
-		billsButton.removeClass("home_button--active");
-		historyButton.removeClass("home_button--active");
-	} else if (openPageNow === "History") {
-		void showHistory(mainContent);
-		historyButton.addClass("home_button--active");
-		homeButton.removeClass("home_button--active");
-		billsButton.removeClass("home_button--active");
-		planButton.removeClass("home_button--active");
-	} else if (openPageNow === "Plans") {
-		void showPlans(mainContent);
-		planButton.addClass("home_button--active");
-		homeButton.removeClass("home_button--active");
-		historyButton.removeClass("home_button--active");
-		billsButton.removeClass("home_button--active");
-	} else if (openPageNow === "Bills") {
-		void showBills(mainContent);
-		billsButton.addClass("home_button--active");
-		homeButton.removeClass("home_button--active");
-		historyButton.removeClass("home_button--active");
-		planButton.removeClass("home_button--active");
-	} else {
-		void showHome(mainContent);
-		homeButton.addClass("home_button--active");
-		planButton.removeClass("home_button--active");
-		billsButton.removeClass("home_button--active");
-		historyButton.removeClass("home_button--active");
-	}
-}
-
-const showAllMonths = async (): Promise<void> => {
-	const { contentEl } = FinancialAccountingView.instance;
-	contentEl.empty();
-
-	const { year } = getDate();
-
-	await renderFinanceHeader('calendar');
-
-	const calendarHead = contentEl.createEl("div", {
-		cls: "calendar-header",
-	});
-	calendarHead.createEl("h1", { text: "Calendar" });
-
-	const calendarMain = contentEl.createEl("div", {
-		cls: "calendar-main",
-	});
-
-	const allMonths = [
-		"☃️ January",
-		"🌨️ February",
-		"🌷 March",
-		"🌱 April",
-		"☀️ May",
-		"🌳 June",
-		"🏖️ July",
-		"🌾 August",
-		"🍁 September",
-		"🍂 October",
-		"☔ November",
-		"❄️ December",
-	];
-
-	for (let i = Number(year); i >= MainPlugin.instance.settings.startYear; i--) {
-		const calendarUlTitle = calendarMain.createEl("div", {
-			cls: "calendar-list-title",
-		});
-		calendarUlTitle.createEl("span", { text: String(i) });
-		TheSumOfExpensesAndIncomeForTheYear(String(i), calendarUlTitle).toString();
-
-		const calendarUl = calendarMain.createEl("ul", {
-			cls: "calendar-list",
-			attr: {
-				"data-year": i,
-			},
-		});
-
-		for (let k = allMonths.length - 1; k >= 0; k--) {
-			const calendarItem = calendarUl.createEl("li", {
-				attr: {
-					"data-month": `${k + 1}`,
-					"data-year": `${i}`,
-				},
-			});
-			calendarItem.onclick = async (ev: MouseEvent) => {
-				await initOtherMonth(ev);
-			};
-			calendarItem.createEl("p", {
-				text: allMonths[k],
-			});
-			const storyMonth = calendarItem.createEl("div", {
-				cls: "story-month",
-			});
-			await IncomeAndExpensesForTheMonth(`${k + 1}`, String(i), storyMonth);
-		}
-	}
-}
-
-export const initOtherMonth = async (e: MouseEvent): Promise<void> => {
-	const { year, month } = getDate();
-
-	const target = (e.target as HTMLElement)?.closest<HTMLElement>("[data-month]") ?? (e.target as HTMLElement);
-	const dataMonth = target?.dataset?.month;
-	const dataYear = String(target?.dataset?.year);
-
-	if (dataMonth === month && dataYear === year) {
-		stateManager({ selectedMonth: null, selectedYear: null });
-		return FinancialAccountingView.instance?.onOpen();
-	}
-
-	stateManager({ selectedMonth: dataMonth, selectedYear: dataYear });
-
-	await showAnotherInitialView();
-}
-
-export const showAnotherInitialView = async (): Promise<void> => {
-	if (!FinancialAccountingView.instance || !MainPlugin.instance) return;
-
-	const { contentEl } = FinancialAccountingView.instance;
-	contentEl.empty();
-
-	await renderFinanceHeader();
-	contentEl.setAttribute("data-page", "home");
-
-	await otherMonthHomeButtons();
-}
-
-
-export const showAnotherInitialViewOld = async (): Promise<void> => {
-	if (!FinancialAccountingView.instance || !MainPlugin.instance) return;
-
-	const nowYear: number = new Date().getFullYear()
-
-	const { selectedMonth, selectedYear } = stateManager();
-
-	const expensePlan = await getAdditionalData<PlanData>('categories', 'expenditure_plan');
-	if (expensePlan.status === "error") {
-		new Notice(expensePlan.error.message);
-		console.error(expensePlan.error);
-		return
-	}
-
-	const incomePlan = await getAdditionalData<PlanData>('categories', "income_plan");
-	if (incomePlan.status === "error") {
-		new Notice(incomePlan.error.message);
-		console.error(incomePlan.error);
-		return
-	}
-
-	const { contentEl } = FinancialAccountingView.instance;
-	contentEl.empty();
-
-	const exitButton = contentEl.createEl("div", {
-		cls: "exit-button",
-		attr: {
-			id: "exit-button",
-		},
-	});
-	setIcon(exitButton, "arrow-left");
-	exitButton.addEventListener("click", () => {
-		stateManager({ selectedMonth: null, selectedYear: null });
-		FinancialAccountingView.instance?.onOpen().catch(console.error);
-	});
-
-	const financeHeader = contentEl.createEl("div", {
-		cls: "finance-header finance-header--with-back",
-	});
-	financeHeader.appendChild(exitButton);
-
-	const allMonths = [
-		"☃️ January",
-		"🌨️ February",
-		"🌷 March",
-		"🌱 April",
-		"☀️ May",
-		"🌳 June",
-		"🏖️ July",
-		"🌾 August",
-		"🍁 September",
-		"🍂 October",
-		"☔ November",
-		"❄️ December",
-	];
-	const showAllMonthsButton = financeHeader.createEl("button", {
-		attr: {
-			id: "showAllMonths",
-		},
-	});
-	if (Number(selectedYear) === nowYear) {
-		showAllMonthsButton.createEl("span", {
-			text: allMonths[Number(selectedMonth) - 1],
-			attr: {
-				id: "showAllMonths",
-			},
-		});
-	} else {
-		showAllMonthsButton.createEl("span", {
-			text: `${allMonths[Number(selectedMonth) - 1]} ${selectedYear}`,
-			attr: {
-				id: "showAllMonths",
-			},
-		});
-	}
-
-	showAllMonthsButton.addEventListener("click", () => {
-		if (contentEl.dataset.page === "home") {
-			contentEl.setAttribute("data-page", "months");
-			void showAllMonths();
-		}
-	});
-	contentEl.setAttribute("data-page", "home");
-
-	const balance = contentEl.createEl("div", {
-		cls: "balance",
-	});
-	balance.addClass("balance-other");
-
-	const balanceBody = balance.createEl("div", {
-		cls: "balance-body",
-	});
-
-	const balanceExpenses = balanceBody.createEl("div", {
-		cls: "balance_body-expenses",
-	});
-
-	balanceExpenses.createEl("span", {
-		text: "Expense",
-	});
-
-	const balanceExpensesCheck = balanceExpenses.createEl("div", {
-		cls: "balance_expenses-check",
-	});
-
-	setIcon(balanceExpensesCheck, "upload");
-	balanceExpensesCheck.createEl("p", {
-		text: `${formatNumbers(SummarizingData(expensePlan.jsonData).toString())}`,
-	});
-
-	const balanceIncome = balanceBody.createEl("div", {
-		cls: "balance_body-income",
-	});
-
-	balanceIncome.createEl("span", {
-		text: "Income",
-	});
-
-	const balanceIncomeCheck = balanceIncome.createEl("div", {
-		cls: "balance_income-check",
-	});
-
-	setIcon(balanceIncomeCheck, "download");
-	balanceIncomeCheck.createEl("p", {
-		text: `${formatNumbers(SummarizingData(incomePlan.jsonData).toString())}`,
-	});
-
-	await otherMonthHomeButtons();
-}
-
-const otherMonthHomeButtons = async (): Promise<void> => {
-	const { contentEl } = FinancialAccountingView.instance;
-	const { openPageNow } = stateManager()
-
-	const homeNav = contentEl.createEl("div", { cls: "home-nav" });
-	const mainNav = homeNav.createEl("div", {
-		cls: "main-nav",
-	});
-	const addNav = homeNav.createEl("div", {
-		cls: "add-nav",
-	});
-	const mainContent = contentEl.createEl("div", { cls: "main-content" });
-
-	const addButton = addNav.createEl("a", {
-		attr: {
-			id: "add-button",
-			href: "#"
-		},
-	});
-	setIcon(addButton, "plus");
-	addButton.addEventListener("click", () => {
-		void addHistory();
-	})
-
-	const homeButton = mainNav.createEl("a", {
-		attr: {
-			id: "home-button",
-			href: "#"
-		},
-	});
-	setIcon(homeButton, "home");
-	homeButton.addEventListener("click", () => {
-		homeButton.addClass("home_button--active");
-		planButton.removeClass("home_button--active");
-		historyButton.removeClass("home_button--active");
-		mainContent.empty();
-		void showHome(mainContent);
-	});
-
-	const historyButton = mainNav.createEl("a", {
-		attr: {
-			id: "history-button",
-			href: "#",
-		},
-	});
-	setIcon(historyButton, "list");
-	historyButton.addEventListener("click", () => {
-		historyButton.addClass("home_button--active");
-		homeButton.removeClass("home_button--active");
-		planButton.removeClass("home_button--active");
-		mainContent.empty();
-		void showHistory(mainContent);
-	});
-
-	const planButton = mainNav.createEl("a", {
-		attr: {
-			id: "plan-button",
-			href: "#",
-		},
-	});
-	setIcon(planButton, "square-chart-gantt");
-	planButton.addEventListener("click", () => {
-		planButton.addClass("home_button--active");
-		homeButton.removeClass("home_button--active");
-		historyButton.removeClass("home_button--active"); ("home_button--active");
-		mainContent.empty();
-		void showPlans(mainContent);
-	});
-
-	if (!openPageNow || openPageNow === "Home" || openPageNow === null) {
-		void showHome(mainContent);
-		homeButton.addClass("home_button--active");
-		planButton.removeClass("home_button--active");
-		historyButton.removeClass("home_button--active");
-	} else if (openPageNow === "History") {
-		void showHistory(mainContent);
-		historyButton.addClass("home_button--active");
-		homeButton.removeClass("home_button--active");
-		planButton.removeClass("home_button--active");
-	} else if (openPageNow === "Plans") {
-		void showPlans(mainContent);
-		planButton.addClass("home_button--active");
-		homeButton.removeClass("home_button--active");
-		historyButton.removeClass("home_button--active");
-	} else {
-		void showHome(mainContent);
-		homeButton.addClass("home_button--active");
-		planButton.removeClass("home_button--active");
-		historyButton.removeClass("home_button--active");
-	}
-}
-
-
-/** Local artwork avoids reliance on the operating system's flag emoji font. */
-function currencyLabel(code: string): DocumentFragment {
-    const fragment = document.createDocumentFragment();
-    const emoji = currencies[code as keyof typeof currencies]?.flagEmoji ?? '🌐';
-    const svg = (flags as Record<string, string>)[emoji];
-    if (svg) {
-        const image = document.createElement('img');
-        image.className = 'finance-currency-flag';
-        image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-        image.alt = '';
-        image.setAttribute('aria-hidden', 'true');
-        image.width = 22;
-        image.height = 22;
-        image.draggable = false;
-        fragment.appendChild(image);
+import { Notice, setIcon } from 'obsidian';
+import MainPlugin, {
+    BillData,
+    PlanData,
+    stateManager,
+    CardItem,
+    YearData,
+    DataFileResult,
+    HistoryData,
+} from '../../main';
+import { getAdditionalData, getAllFile, getMainData } from '../controllers/searchData';
+import {
+    activeCurrency,
+    divideByRemainingDays,
+    formatNumbers,
+    getCurrencySymbol,
+    SummarizingDataForTheTrueBills,
+    switchBalanceLine,
+    getDate,
+    inActiveCurrency,
+    isSuccess,
+    SummarizingData,
+    CategorySummary,
+    summarizeCategories,
+    getAmountPercentage,
+} from '../middleware/otherFunc';
+import { generationHistoryContent } from './historyView';
+import Big from 'big.js';
+import { getEmojiColor } from '../middleware/emojiColor';
+
+export const showHome = async (mainContent: HTMLDivElement) => {
+    stateManager({ openPageNow: "Home" });
+
+    const bills = await getAdditionalData<BillData>('accounts');
+    if (bills.status === "error") {
+        new Notice(bills.error.message);
+        console.error(bills.error);
+        return
     }
-    fragment.appendChild(document.createTextNode(code));
-    return fragment;
+
+    const expensePlan = await getAdditionalData<PlanData>('categories', 'expenditure_plan');
+    if (expensePlan.status === "error") {
+        new Notice(expensePlan.error.message);
+        console.error(expensePlan.error);
+        return
+    }
+
+    const mainContentHeader = mainContent.createEl("div", {
+        cls: "main-content-body",
+    });
+
+    const balanceContent = mainContentHeader.createEl("div", {
+        cls: "balance-content",
+    });
+
+    const balance = balanceContent.createEl("div", {
+        cls: "balance",
+    });
+
+    const balanceTop = balance.createEl("div", {
+        cls: "balance-top",
+    });
+
+    balanceTop.createEl("span", {
+        text: "Balance",
+    });
+
+    balanceTop.createEl("p", {
+        text: `${formatNumbers(SummarizingDataForTheTrueBills(bills.jsonData).toString())} ${getCurrencySymbol(activeCurrency())}`,
+    });
+
+    balanceTop.createEl("span", {
+        text: `~${formatNumbers(divideByRemainingDays(SummarizingDataForTheTrueBills(bills.jsonData)).toString())} for a day`,
+    });
+
+    const balanceLine = balance.createEl("div", {
+        cls: "balance-line",
+    });
+    balanceLine.style.setProperty("--after-width", `${switchBalanceLine(bills.jsonData, expensePlan.jsonData)}%`);
+
+    const statsContent = mainContent.createDiv();
+    const categoriesContent = mainContent.createDiv({ cls: 'home-categories' });
+    await Promise.all([renderStatistics(statsContent), showHomeCategories(categoriesContent, generationHistoryContent)]);
+}
+
+type PeriodStatistics = {
+    income: Big;
+    expense: Big;
+    balance: Big;
+    operationCount: Big;
+};
+
+function calculateYearStatistics(yearData?: YearData): PeriodStatistics {
+    let income = new Big(0);
+    let expense = new Big(0);
+    let operationCount = new Big(0);
+
+    for (const month of Object.values(yearData?.months ?? {})) {
+        const operations = month.history.filter(inActiveCurrency);
+        operationCount = operationCount.plus(operations.length);
+
+        for (const operation of operations) {
+            if (operation.type === 'expense') {
+                expense = expense.plus(operation.amount);
+            } else if (operation.type === 'income') {
+                income = income.plus(operation.amount);
+            }
+        }
+    }
+
+    return { income, expense, operationCount, balance: income.minus(expense) };
+}
+
+function createStatisticsCards(
+    statistics: PeriodStatistics,
+    currency: string,
+    period?: string,
+): CardItem[] {
+    const formatAmount = (amount: Big) => `${formatNumbers(amount.toString())} ${currency}`;
+    return [
+        {
+            title: 'Income',
+            value: formatAmount(statistics.income),
+            icon: 'arrow-up',
+            type: 'income',
+            period,
+        },
+        {
+            title: 'Expenses',
+            value: formatAmount(statistics.expense),
+            icon: 'arrow-down',
+            type: 'expense',
+            period,
+        },
+        {
+            title: 'Balance',
+            value: formatAmount(statistics.balance),
+            icon: 'calendar-check',
+            type: 'balance',
+            period,
+        },
+        {
+            title: 'Operations',
+            value: statistics.operationCount.toString(),
+            icon: 'list',
+            type: 'operations',
+            period,
+        },
+    ];
+}
+
+const renderStatistics = async (mainContent: HTMLDivElement) => {
+    const [bills, expensePlan, incomePlan, history] = await Promise.all([
+        getAdditionalData<BillData>('accounts'),
+        getAdditionalData<PlanData>('categories', 'expenditure_plan'),
+        getAdditionalData<PlanData>('categories', 'income_plan'),
+        getMainData()
+    ]);
+
+    if (
+        !isSuccess(bills) ||
+        !isSuccess(expensePlan) ||
+        !isSuccess(incomePlan) ||
+        !isSuccess(history)
+    ) {
+        return;
+    }
+
+    const { selectedYear } = stateManager();
+    const currentYear = selectedYear ?? getDate().year;
+    const nowYear = new Date().getFullYear();
+    const startYear = MainPlugin.instance.settings.startYear;
+
+    const years = new Set<number>();
+    for (let year = startYear; year <= nowYear; year++) {
+        years.add(year);
+    }
+    years.add(Number(currentYear));
+    const yearsToFetch = [...years];
+
+    const yearFilesResults = await Promise.all(yearsToFetch.map(year => getAllFile<YearData>(String(year))));
+    const yearFilesMap = new Map<number, YearData>();
+
+    for (let index = 0; index < yearsToFetch.length; index++) {
+        const result = yearFilesResults[index];
+        if (result.status === "error") {
+            new Notice(result.error.message);
+            console.error(result.error);
+            return;
+        }
+        yearFilesMap.set(yearsToFetch[index], result.json);
+    }
+
+
+    const selectedYearStats = calculateYearStatistics(yearFilesMap.get(Number(currentYear)));
+
+    let totalAllExpense = new Big(0);
+    let totalAllIncome = new Big(0);
+    let totalOperationCount = new Big(0);
+
+    for (let year = startYear; year <= nowYear; year++) {
+        const stats = calculateYearStatistics(yearFilesMap.get(year));
+        totalAllExpense = totalAllExpense.plus(stats.expense);
+        totalAllIncome = totalAllIncome.plus(stats.income);
+        totalOperationCount = totalOperationCount.plus(stats.operationCount);
+    }
+    const totalAllBalance = totalAllIncome.minus(totalAllExpense);
+
+    const currency = getCurrencySymbol(activeCurrency());
+
+    const monthData = createStatisticsCards({
+        income: SummarizingData(incomePlan.jsonData),
+        expense: SummarizingData(expensePlan.jsonData),
+        balance: SummarizingDataForTheTrueBills(bills.jsonData),
+        operationCount: new Big(history.jsonData.length),
+    }, currency);
+    const yearData = createStatisticsCards(selectedYearStats, currency, `for ${currentYear}`);
+    const allData = createStatisticsCards({
+        income: totalAllIncome,
+        expense: totalAllExpense,
+        balance: totalAllBalance,
+        operationCount: totalOperationCount,
+    }, currency, 'for all time');
+
+    const gridContainer = mainContent.createDiv({ cls: "stats-grid" });
+
+    const renderCards = (items: CardItem[]) => {
+        gridContainer.empty();
+        for (const item of items) {
+            const card = gridContainer.createDiv({ cls: `stats-card stats-card-${item.type}` });
+            const iconContainer = card.createDiv({ cls: "stats-card-icon" });
+            setIcon(iconContainer, item.icon);
+
+            const content = card.createDiv({ cls: "stats-card-content" });
+            content.createDiv({ cls: "stats-card-title", text: item.title });
+            content.createDiv({ cls: "stats-card-value", text: item.value });
+            if (item.period) {
+                content.createDiv({ cls: "stats-card-period", text: item.period });
+            }
+        }
+    };
+
+    const views = [
+        { mode: "month", data: monthData },
+        { mode: "year", data: yearData },
+        { mode: "all", data: allData },
+    ] as const;
+
+    let currentViewIndex = 0;
+
+    const updateView = () => {
+        const currentView = views[currentViewIndex];
+        gridContainer.dataset.data = currentView.mode;
+        renderCards(currentView.data);
+    };
+
+    updateView();
+
+    gridContainer.addEventListener("click", () => {
+        currentViewIndex = (currentViewIndex + 1) % views.length;
+        updateView();
+    });
+};
+
+interface ChartCategory extends CategorySummary {
+    color: string;
+    children?: ChartCategory[];
+}
+
+type MoneyFormatter = (amount: Big) => string;
+
+type HistoryRenderer = (container: HTMLDivElement, data: DataFileResult<HistoryData>) => Promise<unknown>;
+
+function prepareChartCategories(history: HistoryData[], plans: PlanData[], type: HistoryData['type']): ChartCategory[] {
+    return summarizeCategories(history, plans, type).map(category => ({
+        ...category,
+        color: getEmojiColor(category.emoji)
+    }));
+}
+
+function sumCategories(categories: ChartCategory[]): Big {
+    return categories.reduce((total, category) => total.plus(category.amount), new Big(0));
+}
+
+function getSelectedPeriodLabel(): string {
+    const { selectedYear, selectedMonth } = stateManager();
+    const now = getDate();
+    const date = new Date(Number(selectedYear ?? now.year), Number(selectedMonth ?? now.month) - 1, 1);
+    return date.toLocaleDateString('en', {
+        month: 'long',
+        year: 'numeric'
+    });
+}
+
+export async function showHomeCategories(container: HTMLDivElement, renderHistory: HistoryRenderer): Promise<void> {
+    const [expenses, income, history] = await Promise.all([
+        getAdditionalData<PlanData>('categories', 'expenditure_plan'),
+        getAdditionalData<PlanData>('categories', 'income_plan'),
+        getMainData(),
+    ]);
+    if (!isSuccess(expenses) || !isSuccess(income) || !isSuccess(history)) {
+        return;
+    }
+    const expenseCategories = prepareChartCategories(history.jsonData, expenses.jsonData, 'expense');
+    const incomeCategories = prepareChartCategories(history.jsonData, income.jsonData, 'income');
+    const currency = getCurrencySymbol(activeCurrency());
+    const formatMoney: MoneyFormatter = amount => `${formatNumbers(amount.toString())} ${currency}`;
+    new HomeCategoriesView(
+        container,
+        expenseCategories,
+        incomeCategories,
+        history.jsonData,
+        formatMoney,
+        getSelectedPeriodLabel(),
+        renderHistory,
+    );
+}
+
+class HomeCategoriesView {
+    private readonly selectedCategoryIds = new Set<string>();
+    private readonly elements: ReturnType<typeof createCategoryChartElements>;
+    private readonly chartCategories: ChartCategory[];
+    private readonly totalExpense: Big;
+    private readonly segments: Map<string, SVGGElement>;
+    private readonly categoryButtons: Map<string, HTMLButtonElement>;
+    private operationsVersion = 0;
+
+    constructor(
+        container: HTMLDivElement,
+        expenseCategories: ChartCategory[],
+        incomeCategories: ChartCategory[],
+        private readonly history: HistoryData[],
+        private readonly formatMoney: MoneyFormatter,
+        private readonly period: string,
+        private readonly renderHistory: HistoryRenderer,
+    ) {
+        this.totalExpense = sumCategories(expenseCategories);
+        this.elements = createCategoryChartElements(container);
+        this.chartCategories = groupDonutCategories(expenseCategories, this.totalExpense, this.elements.svg);
+        createChartSvg(this.elements.svg, 'circle', {
+            cx: 160,
+            cy: 160,
+            r: DONUT_EMOJI_RADIUS,
+            fill: 'none',
+            'stroke-width': DONUT_OUTER_RADIUS - DONUT_INNER_RADIUS,
+            class: 'home-donut-track',
+        });
+        const onToggle = (id: string) => this.toggleCategory(id);
+        this.segments = renderDonutSegments(this.elements.svg, this.chartCategories, this.totalExpense, formatMoney, onToggle);
+        if (!expenseCategories.length) {
+            this.elements.chartCard.createEl('p', {
+                cls: 'home-category-empty',
+                text: 'No expenses for this month yet.'
+            });
+        }
+        this.categoryButtons = renderCategoryBlock(container, this.chartCategories, this.totalExpense, 'expense', formatMoney, onToggle);
+        renderCategoryBlock(container, incomeCategories, sumCategories(incomeCategories), 'income', formatMoney, onToggle);
+        this.elements.clearSelection.addEventListener('click', () => {
+            this.selectedCategoryIds.clear();
+            this.updateSelection();
+        });
+        this.elements.showOperations.addEventListener('click', () => this.showSelectedOperations());
+        this.updateSelection();
+    }
+
+    private toggleCategory(id: string): void {
+        if (this.selectedCategoryIds.has(id)) {
+            this.selectedCategoryIds.delete(id);
+        } else {
+            this.selectedCategoryIds.add(id);
+        }
+        this.updateSelection();
+    }
+
+    private updateSelection(): void {
+        this.operationsVersion++;
+        this.elements.operations.hidden = true;
+        this.elements.operations.empty();
+
+        const selectedCategories = this.chartCategories.filter(category => this.selectedCategoryIds.has(category.id));
+        this.updateChartCenter(selectedCategories);
+        this.updateCategoryHighlights(selectedCategories.length > 0);
+        this.renderSelectedChips(selectedCategories);
+    }
+
+    private updateChartCenter(categories: ChartCategory[]): void {
+        const { center, centerTitle, centerAmount, centerDetail, clearSelection, filter } = this.elements;
+        const hasSelection = categories.length > 0;
+        const amount = hasSelection ? sumCategories(categories) : this.totalExpense;
+        let color = 'var(--text-muted)';
+        let title = '';
+
+        if (categories.length === 1) {
+            color = categories[0].color;
+            title = categories[0].name;
+        } else if (hasSelection) {
+            color = 'var(--interactive-accent)';
+            title = `${categories.length} categories`;
+        }
+
+        center.style.setProperty('--category-color', color);
+        center.classList.toggle('is-selected', hasSelection);
+        centerTitle.textContent = title;
+        centerTitle.hidden = !hasSelection;
+        centerAmount.textContent = this.formatMoney(amount);
+        centerDetail.textContent = hasSelection
+            ? `${Math.round(getAmountPercentage(amount, this.totalExpense))}%`
+            : `Total for ${this.period}`;
+        clearSelection.hidden = !hasSelection;
+        filter.hidden = !hasSelection;
+    }
+
+    private updateCategoryHighlights(hasSelection: boolean): void {
+        for (const category of this.chartCategories) {
+            const isSelected = this.selectedCategoryIds.has(category.id);
+            const segment = this.segments.get(category.id);
+            segment?.classList.toggle('is-selected', isSelected);
+            segment?.classList.toggle('is-muted', hasSelection && !isSelected);
+            segment?.setAttribute('aria-pressed', String(isSelected));
+
+            const button = this.categoryButtons.get(category.id);
+            button?.classList.toggle('is-selected', isSelected);
+            button?.setAttribute('aria-pressed', String(isSelected));
+        }
+    }
+
+    private renderSelectedChips(categories: ChartCategory[]): void {
+        this.elements.chips.empty();
+
+        for (const category of categories) {
+            const chip = this.elements.chips.createEl('button', {
+                text: `${category.emoji} ${category.name} ×`,
+                cls: 'home-chart-chip',
+                attr: {
+                    type: 'button',
+                    'aria-label': `Remove ${category.name} filter`
+                },
+            });
+            chip.style.setProperty('--category-color', category.color);
+            chip.addEventListener('click', () => this.toggleCategory(category.id));
+        }
+    }
+
+    private showSelectedOperations(): void {
+        const selectedCategories = this.chartCategories.filter(category => this.selectedCategoryIds.has(category.id));
+        const categoryIds = new Set(selectedCategories.flatMap(category => category.categoryIds));
+        const filtered = this.history.filter(transaction => transaction.type === 'expense' && categoryIds.has(transaction.category.id));
+        this.elements.operations.empty();
+        this.elements.operations.hidden = false;
+        this.elements.operations.createEl('h3', {
+            cls: 'home-section-title',
+            text: `Selected operations · ${filtered.length}`
+        });
+        const list = this.elements.operations.createDiv({ cls: 'history-content' });
+        const version = ++this.operationsVersion;
+        void this.renderHistory(list, {
+            status: 'success',
+            jsonData: filtered
+        }).then(() => {
+            if (version === this.operationsVersion) {
+                this.elements.operations.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start'
+                });
+            }
+        }).catch(error => {
+            console.error('Failed to show category operations', error);
+        });
+    }
+}
+
+function createCategoryChartElements(container: HTMLDivElement) {
+    const chartCard = container.createDiv({ cls: 'home-chart-card' });
+    chartCard.createEl('h3', {
+        text: 'Expenses by category',
+        cls: 'home-section-title'
+    });
+    const chart = chartCard.createDiv({ cls: 'home-donut' });
+    const svg = createChartSvg(chart, 'svg', {
+        viewBox: '0 0 320 320',
+        class: 'home-donut-svg',
+        role: 'group',
+        'aria-label': 'Expenses by category'
+    });
+    const center = chart.createDiv({
+        cls: 'home-donut-center',
+        attr: {
+            'aria-live': 'polite',
+            'aria-atomic': 'true'
+        }
+    });
+    const centerTitle = center.createDiv({ cls: 'home-donut-label' });
+    const centerAmount = center.createDiv({ cls: 'home-donut-amount' });
+    const centerDetail = center.createDiv({ cls: 'home-donut-detail' });
+    const clearSelection = center.createEl('button', {
+        cls: 'home-chart-clear',
+        text: 'Clear selection',
+        attr: { type: 'button' }
+    });
+    const filter = chartCard.createDiv({ cls: 'home-chart-filter' });
+    const showOperations = filter.createEl('button', {
+        cls: 'home-chart-operations',
+        text: 'Show filtered operations →',
+        attr: { type: 'button' }
+    });
+    const chips = filter.createDiv({ cls: 'home-chart-chips' });
+    const operations = container.createDiv({ cls: 'home-category-operations' });
+    operations.hidden = true;
+    return {
+        chartCard,
+        svg,
+        center,
+        centerTitle,
+        centerAmount,
+        centerDetail,
+        clearSelection,
+        filter,
+        showOperations,
+        chips,
+        operations
+    };
+}
+
+function renderDonutSegments(
+    svg: SVGSVGElement,
+    categories: ChartCategory[],
+    total: Big,
+    formatMoney: MoneyFormatter,
+    onToggle: (id: string) => void
+): Map<string, SVGGElement> {
+    const segments = new Map<string, SVGGElement>();
+    let startAngle = -Math.PI / 2;
+    for (const category of categories) {
+        const sweep = getAmountPercentage(category.amount, total) / 100 * Math.PI * 2;
+        const middle = startAngle + sweep / 2;
+        const group = createChartSvg(svg, 'g', {
+            class: 'home-donut-segment',
+            role: 'button',
+            tabindex: 0,
+            'aria-pressed': 'false',
+            'aria-label': `${category.name}: ${formatMoney(category.amount)}, ${Math.round(getAmountPercentage(category.amount, total))}%`,
+        });
+        group.style.setProperty('--segment-x', `${Math.cos(middle) * 6}px`);
+        group.style.setProperty('--segment-y', `${Math.sin(middle) * 6}px`);
+        createChartSvg(group, 'path', {
+            d: donutSegmentPath(startAngle, sweep),
+            fill: category.color
+        });
+        createChartSvg(group, 'title', {}).textContent = `${category.name}: ${formatMoney(category.amount)}`;
+        createChartSvg(group, 'text', {
+            x: 160 + Math.cos(middle) * DONUT_EMOJI_RADIUS,
+            y: 160 + Math.sin(middle) * DONUT_EMOJI_RADIUS,
+            class: 'home-donut-emoji',
+            'aria-hidden': 'true'
+        }).textContent = category.emoji;
+        group.addEventListener('click', () => onToggle(category.id));
+        group.addEventListener('keydown', event => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                onToggle(category.id);
+            }
+        });
+        segments.set(category.id, group);
+        startAngle += sweep;
+    }
+    return segments;
+}
+
+function renderCategoryBlock(
+    container: HTMLDivElement,
+    categories: ChartCategory[],
+    total: Big,
+    type: HistoryData['type'],
+    formatMoney: MoneyFormatter,
+    onToggle: (id: string) => void
+): Map<string, HTMLButtonElement> {
+    const categoryButtons = new Map<string, HTMLButtonElement>();
+    const block = container.createDiv({ cls: `home-category-card home-category-card--${type}` });
+    const header = block.createDiv({ cls: 'home-category-header' });
+    header.createEl('h3', {
+        cls: 'home-section-title',
+        text: type === 'expense' ? 'Expense categories' : 'Income categories'
+    });
+    header.createEl('span', {
+        cls: 'home-category-count',
+        text: String(categories.length)
+    });
+    if (!categories.length) {
+        block.createEl('p', {
+            cls: 'home-category-empty',
+            text: type === 'expense' ? 'No expenses for this month yet.' : 'No income for this month yet.'
+        });
+        return categoryButtons;
+    }
+    for (const category of categories) {
+        const row = block.createDiv({ cls: 'home-category-row' });
+        row.style.setProperty('--category-color', category.color);
+        const details = row.createDiv({ cls: 'home-category-details' });
+        const label = `${category.emoji} ${category.name}`;
+        if (type === 'expense') {
+            const button = details.createEl('button', {
+                cls: 'home-category-name',
+                text: label,
+                attr: {
+                    type: 'button',
+                    'aria-pressed': 'false'
+                }
+            });
+            button.addEventListener('click', () => onToggle(category.id));
+            categoryButtons.set(category.id, button);
+        } else {
+            details.createEl('span', {
+                cls: 'home-category-name',
+                text: label
+            });
+        }
+        details.createEl('span', {
+            cls: 'home-category-amount',
+            text: formatMoney(category.amount)
+        });
+        renderCategoryPercentage(row, category.amount, total);
+        if (category.children) {
+            const breakdown = row.createEl('details', { cls: 'home-category-breakdown' });
+            breakdown.createEl('summary', { text: `Show ${category.children.length} categories` });
+            for (const child of category.children) {
+                const item = breakdown.createDiv({ cls: 'home-category-breakdown-item' });
+                item.style.setProperty('--category-color', child.color);
+                const details = item.createDiv({ cls: 'home-category-details' });
+                details.createEl('span', {
+                    cls: 'home-category-name',
+                    text: `${child.emoji} ${child.name}`
+                });
+                details.createEl('span', {
+                    cls: 'home-category-amount',
+                    text: formatMoney(child.amount)
+                });
+                renderCategoryPercentage(item, child.amount, total);
+            }
+        }
+    }
+
+    return categoryButtons;
+}
+
+function renderCategoryPercentage(container: HTMLDivElement, amount: Big, total: Big): void {
+    const percentage = getAmountPercentage(amount, total);
+    const progress = container.createDiv({
+        cls: 'home-category-progress',
+        attr: { 'aria-hidden': 'true' }
+    });
+    progress.createDiv().style.width = `${percentage}%`;
+    container.createEl('span', {
+        cls: 'home-category-percent',
+        text: `${Math.round(percentage)}%`
+    });
+}
+
+const DONUT_INNER_RADIUS = 86;
+
+const DONUT_OUTER_RADIUS = 148;
+
+const DONUT_EMOJI_RADIUS = (DONUT_INNER_RADIUS + DONUT_OUTER_RADIUS) / 2;
+
+const DONUT_EMOJI_PADDING = 3;
+
+function createChartSvg<K extends keyof SVGElementTagNameMap>(
+    parent: Element,
+    tag: K,
+    attributes: Record<string, string | number>,
+): SVGElementTagNameMap[K] {
+    const element = parent.ownerDocument.createElementNS('http://www.w3.org/2000/svg', tag);
+    for (const [name, value] of Object.entries(attributes)) {
+        element.setAttribute(name, String(value));
+    }
+    parent.appendChild(element);
+    return element;
+}
+
+function groupDonutCategories(categories: ChartCategory[], total: Big, svg: SVGSVGElement): ChartCategory[] {
+    const visible = [...categories];
+    const other: ChartCategory = {
+        id: '__other__',
+        name: 'Other',
+        emoji: '📦',
+        color: '#81818b',
+        amount: new Big(0),
+        categoryIds: [],
+        children: []
+    };
+    const boundsByEmoji = new Map<string, DOMRect>();
+    const fits = (category: ChartCategory, start: number) => {
+        let bounds = boundsByEmoji.get(category.emoji);
+        if (!bounds) {
+            const label = createChartSvg(svg, 'text', {
+                x: 0,
+                y: 0,
+                class: 'home-donut-emoji',
+                visibility: 'hidden',
+                'aria-hidden': 'true'
+            });
+            label.textContent = category.emoji;
+            bounds = label.getBBox();
+            label.remove();
+            // A hidden Obsidian pane may not provide text metrics until it is shown.
+            if (!bounds.width || !bounds.height) {
+                bounds = new DOMRect(-11, -13, 22, 26);
+            }
+            boundsByEmoji.set(category.emoji, bounds);
+        }
+        const sweep = getAmountPercentage(category.amount, total) / 100 * Math.PI * 2;
+        return donutEmojiFits(bounds, start, sweep);
+    };
+    const moveToOther = (index: number) => {
+        const [category] = visible.splice(index, 1);
+        other.amount = other.amount.plus(category.amount);
+        other.categoryIds.push(...category.categoryIds);
+        other.children?.push(category);
+    };
+    while (visible.length) {
+        let start = -Math.PI / 2;
+        const tooSmall = visible.findIndex(category => {
+            if (!fits(category, start)) {
+                return true;
+            }
+            start += getAmountPercentage(category.amount, total) / 100 * Math.PI * 2;
+            return false;
+        });
+        if (tooSmall !== -1) {
+            moveToOther(tooSmall);
+            // Removing a slice moves the following horizontal emoji to new angles.
+            continue;
+        }
+        if (other.categoryIds.length && !fits(other, start)) {
+            // Other must also have enough space for its icon; keep exact proportions.
+            moveToOther(visible.length - 1);
+            continue;
+        }
+        break;
+    }
+    if (other.categoryIds.length) {
+        other.children?.sort((a, b) => b.amount.cmp(a.amount));
+        visible.push(other);
+    }
+    return visible;
+}
+
+function donutEmojiFits(bounds: DOMRect, start: number, sweep: number): boolean {
+    const middle = start + sweep / 2;
+    const x = Math.cos(middle) * DONUT_EMOJI_RADIUS;
+    const y = Math.sin(middle) * DONUT_EMOJI_RADIUS;
+    const left = x + bounds.x - DONUT_EMOJI_PADDING;
+    const right = x + bounds.x + bounds.width + DONUT_EMOJI_PADDING;
+    const top = y + bounds.y - DONUT_EMOJI_PADDING;
+    const bottom = y + bounds.y + bounds.height + DONUT_EMOJI_PADDING;
+    const nearestRadius = Math.hypot(Math.max(left, 0, -right), Math.max(top, 0, -bottom));
+    if (nearestRadius < DONUT_INNER_RADIUS) {
+        return false;
+    }
+    const halfAngle = sweep / 2 - donutSegmentGap(sweep);
+    return [[left, top], [right, top], [left, bottom], [right, bottom]].every(([px, py]) => {
+        const angle = Math.atan2(py, px) - middle;
+        const difference = Math.atan2(Math.sin(angle), Math.cos(angle));
+        return Math.hypot(px, py) <= DONUT_OUTER_RADIUS && Math.abs(difference) <= halfAngle;
+    });
+}
+
+function donutSegmentGap(sweep: number): number {
+    return sweep < Math.PI * 2 - 0.001 ? Math.min(0.016, sweep / 4) : 0;
+}
+
+function donutSegmentPath(start: number, sweep: number): string {
+    // Two arcs also cover a full ring when the month has just one category.
+    const gap = donutSegmentGap(sweep);
+    const from = start + gap;
+    const to = start + sweep - gap;
+    const middle = (from + to) / 2;
+    const point = (radius: number, angle: number) => `${160 + Math.cos(angle) * radius} ${160 + Math.sin(angle) * radius}`;
+    const outer = DONUT_OUTER_RADIUS;
+    const inner = DONUT_INNER_RADIUS;
+    return [
+        `M ${point(outer, from)}`,
+        `A ${outer} ${outer} 0 0 1 ${point(outer, middle)}`,
+        `A ${outer} ${outer} 0 0 1 ${point(outer, to)}`,
+        `L ${point(inner, to)}`,
+        `A ${inner} ${inner} 0 0 0 ${point(inner, middle)}`,
+        `A ${inner} ${inner} 0 0 0 ${point(inner, from)}`,
+        'Z',
+    ].join(' ');
 }

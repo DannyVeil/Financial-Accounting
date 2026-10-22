@@ -20,6 +20,28 @@ const esbuild = require('esbuild');
   return {plugin,files,setFail:fn=>{fail=fn;}};
  }
  const parsed=api.parseBackup(JSON.stringify(data));assert.match(api.backupSummary(parsed),/operations: 1/);
+ // Old date-only records must survive backup and restore without a made-up time.
+ const legacy=setup();
+ const legacyYear=JSON.parse(legacy.files.get('db/2026.json'));
+ legacyYear.months[10].history[0].date='2026-10-19';
+ legacy.files.set('db/2026.json',JSON.stringify(legacyYear));
+ const legacySource=legacy.files.get('db/2026.json');
+ const legacyPath=await api.createBackup(legacy.plugin);
+ const legacyBackup=api.parseBackup(legacy.files.get(legacyPath));
+ assert.equal(legacyBackup.files['2026.json'].months[10].history[0].date,'2026-10-19');
+ assert.equal(legacy.files.get('db/2026.json'),legacySource,'backup must not rewrite legacy records');
+ await api.restoreBackup(legacy.plugin,legacyBackup);
+ assert.deepEqual(JSON.parse(legacy.files.get('db/2026.json')),legacyYear);
+ for(const date of ['2026-10-32','2026-02-30','2026-09-19','2025-10-19','2026-10-19T','2026-10-19T25:00:00',null]) {
+  const invalid=structuredClone(data);
+  invalid.files['2026.json'].months[10].history[0].date=date;
+  assert.throws(()=>api.parseBackup(JSON.stringify(invalid)),/2026\.json, month 10, operation op, date/);
+ }
+ for(const date of ['2026-10-19T12:30:00','2026-10-19T12:30:00.123Z','2026-10-19T00:30:00+05:00']) {
+  const valid=structuredClone(data);
+  valid.files['2026.json'].months[10].history[0].date=date;
+  assert.equal(api.parseBackup(JSON.stringify(valid)).files['2026.json'].months[10].history[0].date,date);
+ }
  for(const mutate of [d=>d.formatVersion=2,d=>d.files['../escape.json']={},d=>d.files['2026.json'].months[10].history[0].bill.id='missing',d=>d.files['2026.json'].months[10].history.push(d.files['2026.json'].months[10].history[0]),d=>d.files['accounts.json'].accounts[0].balance='NaN',d=>d.files['2026.json'].months[10].history[0].date='2026-02-31T12:00:00',d=>delete d.files['2026.json'].months[1]]){
   const copy=structuredClone(data);mutate(copy);assert.throws(()=>api.parseBackup(JSON.stringify(copy)));
  }

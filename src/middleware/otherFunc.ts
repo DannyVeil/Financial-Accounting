@@ -390,7 +390,9 @@ export function summarizeCategories(history: HistoryData[], categories: PlanData
 	const categoryMap = new Map(categories.map(category => [category.id, category]));
 	const totals = new Map<string, CategorySummary>();
 	for (const transaction of history) {
-		if (transaction.type !== type) continue;
+		if (transaction.type !== type) {
+			continue;
+		}
 		const id = transaction.category.id;
 		const existing = totals.get(id);
 		if (existing) {
@@ -406,8 +408,8 @@ export function summarizeCategories(history: HistoryData[], categories: PlanData
 			});
 		}
 	}
-	return [...totals.values()].filter(category => category.amount.gt(0))
-		.sort((a, b) => b.amount.cmp(a.amount));
+	const positiveTotals = [...totals.values()].filter(category => category.amount.gt(0));
+	return positiveTotals.sort((first, second) => second.amount.cmp(first.amount));
 }
 
 export function isSuccess<T>(res: Result<T>): res is SuccessResult<T> {
@@ -424,24 +426,38 @@ export function isSuccess<T>(res: Result<T>): res is SuccessResult<T> {
 /** A collection of amounts. Different currencies are never added together. */
 export class MoneyTotals {
     readonly values = new Map<string, Big>();
+
     add(currency: string, amount: Big | string): this {
-        this.values.set(currency, (this.values.get(currency) ?? new Big(0)).plus(amount));
+        const currentAmount = this.values.get(currency) ?? new Big(0);
+        this.values.set(currency, currentAmount.plus(amount));
         return this;
     }
+
     plus(other: MoneyTotals): MoneyTotals {
         const result = new MoneyTotals();
-        for (const [currency, amount] of this.values) result.add(currency, amount);
-        for (const [currency, amount] of other.values) result.add(currency, amount);
+        for (const [currency, amount] of this.values) {
+            result.add(currency, amount);
+        }
+        for (const [currency, amount] of other.values) {
+            result.add(currency, amount);
+        }
         return result;
     }
+
     minus(other: MoneyTotals): MoneyTotals {
         const negative = new MoneyTotals();
-        for (const [currency, amount] of other.values) negative.add(currency, amount.neg());
+        for (const [currency, amount] of other.values) {
+            negative.add(currency, amount.neg());
+        }
         return this.plus(negative);
     }
+
     toString(): string {
-        return [...this.values].sort(([a], [b]) => a.localeCompare(b))
-            .map(([currency, amount]) => `${amount.toString()} ${currency}`).join(' · ') || '0';
+        const sortedAmounts = [...this.values].sort(([firstCurrency], [secondCurrency]) => {
+            return firstCurrency.localeCompare(secondCurrency);
+        });
+        const labels = sortedAmounts.map(([currency, amount]) => `${amount.toString()} ${currency}`);
+        return labels.join(' · ') || '0';
     }
 }
 
@@ -449,7 +465,9 @@ export class MoneyTotals {
 // decimal strings exactly; only legacy numeric monetary fields need conversion.
 export function normalizeMoneyField(key: string, value: unknown): unknown {
     if ((key === 'amount' || key === 'balance') && typeof value === 'number') {
-        if (!Number.isFinite(value)) throw new Error(`Invalid monetary value: ${key}`);
+        if (!Number.isFinite(value)) {
+            throw new Error(`Invalid monetary value: ${key}`);
+        }
         return String(value);
     }
     return value;

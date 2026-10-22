@@ -130,6 +130,21 @@ Before replacement, a verified `financial-accounting-before-restore-…json` saf
 
 Backups are plain JSON and contain private financial data. A copy in the same vault protects against accidental changes, but not loss of the vault or disk: copy the backup folder to another device or your separately configured backup service.
 
+<!-- CSV history import disabled.
+## CSV history import
+
+Open **Settings → Financial Accounting → Import CSV**. Choose a CSV with a header row (UTF-8 or Windows-1251), then select an existing account and map the date, amount, and optional type, note, and currency columns. Comma, semicolon, and tab separators are supported, including quoted multiline notes. The limit is 5 MB and 10,000 data rows per import.
+
+Choose the date order and decimal separator explicitly. Amounts may use spaces as thousands separators. Without a type column, negative amounts mean expenses and positive amounts mean income. With a type column, use `Expense` / `Income`, `Расход` / `Доход`, or `Debit` / `Credit`. A currency column, when selected, must match the account. Dates must fall between the initial accounting year in settings and the current year.
+
+In the preview, assign existing categories individually or to all income/expense rows. Uncheck rows to exclude them. Possible duplicates match account, calendar date, type, and amount; they are unchecked initially but may be included explicitly. Invalid rows cannot be imported. No accounts, categories, or internal IDs are taken from the file.
+
+**Import does not change current balances.** It creates ordinary operations with fresh IDs in the appropriate year and month. Later edits and deletions affect account balances exactly as they do for manually entered operations. Transfers between accounts are unchanged; the importer does not create or match transfers.
+
+Writes are verified. If an import fails, its history changes are rolled back. A persistent recovery journal lets the next startup roll back an interrupted import. The CSV itself is only read.
+
+-->
+
 ## Current limitations
 
 - No exchange-rate feed, automatic conversion, or combined total across currencies.
