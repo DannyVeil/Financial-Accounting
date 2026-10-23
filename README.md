@@ -94,6 +94,8 @@ Enable **All history** next to the search field to search every recorded year in
 
 Global results show the first 100 matching operations. **Show more** reveals another 100 and disappears when all matches are visible. Changing the query starts again with the first 100 matches. Monthly history is shown in full without this button. Search remains available even if the selected month has no operations.
 
+Your search text, **All history** mode, expanded result count, and scroll position are retained when you return from an operation. Results are reloaded to reflect edits and deletions. Switching the month or currency resets the result count and scroll position while keeping your query and search mode. This interface state is kept for the current plugin session only.
+
 Open a result to edit or delete it in its original month. Older records with dates that do not include a time retain that format when edited.
 
 ### Transfers between accounts
@@ -160,7 +162,7 @@ Writes are verified. If an import fails, its history changes are rolled back. A 
 - No exchange-rate feed, automatic conversion, or combined total across currencies.
 - Changing the main currency does not recalculate past transactions or balances.
 - Account balances are current, not historical snapshots for the selected month.
-- Search is limited to the selected month.
+- Search operates within the selected currency; different currencies are not combined.
 - Transfers have no transaction history entries.
 - Categories and accounts referenced by transaction history cannot be deleted. Archive them to retain their records.
 

@@ -23,6 +23,23 @@ type HistoryRenderer = (
     metadata: HistoryMetadata,
 ) => Promise<void>;
 
+function findHistoryScrollContainer(historyBody: HTMLElement): HTMLElement {
+    const viewWindow = historyBody.ownerDocument.defaultView;
+    let container: HTMLElement | null = historyBody;
+
+    while (container) {
+        const overflowY = viewWindow?.getComputedStyle(container).overflowY;
+        const allowsScrolling = overflowY === 'auto' || overflowY === 'scroll';
+        const contentOverflows = container.scrollHeight > container.clientHeight;
+        if (allowsScrolling && contentOverflows) {
+            return container;
+        }
+        container = container.parentElement;
+    }
+
+    return historyBody;
+}
+
 export async function showHistorySearch(
     mainContent: HTMLDivElement,
     render: HistoryRenderer,
@@ -60,11 +77,57 @@ export async function showHistorySearch(
     showMoreButton.hidden = true;
 
     const currency = activeCurrency();
-    let globalSearchEnabled = false;
-    let visibleOperationCount = GLOBAL_HISTORY_PAGE_SIZE;
+    const savedSearch = stateManager().historySearch;
+    let globalSearchEnabled = savedSearch.globalSearchEnabled;
+    let visibleOperationCount = savedSearch.visibleOperationCount;
+    let savedScrollTop = savedSearch.scrollTop;
+    let renderingResults = false;
+
+    searchInput.value = savedSearch.query;
+    globalSearchButton.setAttribute('aria-pressed', String(globalSearchEnabled));
+    searchInput.placeholder = globalSearchEnabled
+        ? 'Search all history'
+        : 'Search by operations';
     let searchRequestVersion = 0;
     let allHistoryPromise: Promise<HistoryData[]> | undefined;
     let monthHistoryPromise: Promise<HistoryData[]> | undefined;
+
+    function saveSearchState(): void {
+        stateManager({
+            historySearch: {
+                query: searchInput.value,
+                globalSearchEnabled,
+                visibleOperationCount,
+                scrollTop: savedScrollTop,
+            },
+        });
+    }
+
+    function saveScrollPosition(): void {
+        const scrollContainer = findHistoryScrollContainer(body);
+        savedScrollTop = scrollContainer.scrollTop;
+        saveSearchState();
+    }
+
+    function handleScroll(event: Event): void {
+        if (!body.isConnected) {
+            event.currentTarget?.removeEventListener('scroll', handleScroll);
+            return;
+        }
+        if (!renderingResults) {
+            saveScrollPosition();
+        }
+    }
+
+    // Obsidian may scroll the view-content ancestor instead of the history body.
+    let scrollAncestor: HTMLElement | null = body;
+    while (scrollAncestor) {
+        scrollAncestor.addEventListener('scroll', handleScroll);
+        scrollAncestor = scrollAncestor.parentElement;
+    }
+
+    // Save before the editor replaces the history DOM and resets its scroll.
+    historyContent.addEventListener('click', saveScrollPosition, true);
 
     // Cache each scope while this view is open. Failed reads can be retried.
     function loadSearchHistory(): Promise<HistoryData[]> {
@@ -105,7 +168,10 @@ export async function showHistorySearch(
     ): Promise<void> {
         if (!keepVisibleCount) {
             visibleOperationCount = GLOBAL_HISTORY_PAGE_SIZE;
+            savedScrollTop = 0;
         }
+        saveSearchState();
+        renderingResults = true;
         setShowMoreAvailable(false);
         errorMessage.textContent = '';
 
@@ -140,6 +206,22 @@ export async function showHistorySearch(
         await render(historyContent, loadMatchingOperations, metadata);
         if (requestVersion === searchRequestVersion) {
             setShowMoreAvailable(hasMoreResults);
+            // Restore only after the rebuilt list has participated in layout.
+            const viewWindow = body.ownerDocument.defaultView;
+            if (viewWindow) {
+                await new Promise<void>(resolve => {
+                    viewWindow.requestAnimationFrame(() => resolve());
+                });
+            }
+            if (requestVersion !== searchRequestVersion || !body.isConnected) {
+                return;
+            }
+            const scrollContainer = findHistoryScrollContainer(body);
+            const maximumScrollTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight);
+            scrollContainer.scrollTop = Math.min(savedScrollTop, maximumScrollTop);
+            savedScrollTop = scrollContainer.scrollTop;
+            renderingResults = false;
+            saveSearchState();
         }
     }
 
@@ -169,7 +251,7 @@ export async function showHistorySearch(
             void refreshSearchResults(metadata);
         };
 
-        await refreshSearchResults(metadata);
+        await refreshSearchResults(metadata, true);
     } catch (error) {
         errorMessage.textContent = error instanceof Error
             ? error.message

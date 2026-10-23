@@ -1,6 +1,6 @@
 {
 	"name": "financial-accounting",
-	"version": "1.0.6",
+	"version": "1.0.7",
 	"description": "Track income, expenses and accounts offline, search your history, and back up your financial records.",
 	"main": "dist/main.js",
 	"scripts": {

@@ -1,7 +1,7 @@
 {
 	"id": "financial-accounting",
 	"name": "Financial Accounting",
-	"version": "1.0.6",
+	"version": "1.0.7",
 	"minAppVersion": "1.8.0",
 	"description": "Track income, expenses and accounts offline, search your history, and back up your financial records.",
 	"author": "Bugayev Daniil",

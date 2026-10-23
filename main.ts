@@ -453,7 +453,15 @@ async function SelectingTheBaseCurrency({ event, plugin }: { event: Event; plugi
 	}
 }
 
+export interface HistorySearchState {
+    query: string;
+    globalSearchEnabled: boolean;
+    visibleOperationCount: number;
+    scrollTop: number;
+}
+
 type State = {
+    historySearch: HistorySearchState;
 	selectedCurrency: string | null;
 	openPageNow: string | null;
 	selectedYear: string | null;
@@ -462,6 +470,12 @@ type State = {
 
 const createStateManager = () => {
 	let state: State = {
+        historySearch: {
+            query: '',
+            globalSearchEnabled: false,
+            visibleOperationCount: 100,
+            scrollTop: 0,
+        },
 		selectedCurrency: null,
 		openPageNow: null,
 		selectedYear: null,
@@ -470,7 +484,22 @@ const createStateManager = () => {
 
 	return function updateState(newState?: Partial<State>): State {
 		if (newState) {
-			state = { ...state, ...newState };
+			const scopeChanged = (
+                newState.selectedYear !== undefined && newState.selectedYear !== state.selectedYear
+            ) || (
+                newState.selectedMonth !== undefined && newState.selectedMonth !== state.selectedMonth
+            ) || (
+                newState.selectedCurrency !== undefined && newState.selectedCurrency !== state.selectedCurrency
+            );
+
+            state = { ...state, ...newState };
+            if (scopeChanged) {
+                state.historySearch = {
+                    ...state.historySearch,
+                    visibleOperationCount: 100,
+                    scrollTop: 0,
+                };
+            }
 		}
 		return state;
 	};

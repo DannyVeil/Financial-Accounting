@@ -1,8 +1,10 @@
 const assert = require('node:assert/strict');
 const esbuild = require('esbuild');
 class Element {
-    constructor(tag, options = {}) { this.tag = tag; this.children = []; this.value = options.value || options.attr?.value || ''; this.textContent = options.text || ''; this.attributes = options.attr || {}; this.hidden = false; this.checked = false; }
-    createEl(tag, options) { const el = new Element(tag, options); this.children.push(el); if (this.tag === 'select' && this.children.length === 1) this.value = el.value; return el; }
+    constructor(tag, options = {}) { this.tag = tag; this.children = []; this.value = options.value || options.attr?.value || ''; this.textContent = options.text || ''; this.attributes = options.attr || {}; this.hidden = false; this.checked = false; this.scrollTop = 0; this.scrollHeight = 2000; this.clientHeight = 500; this.isConnected = true; this.parentElement = null; this.overflowY = 'auto'; this.ownerDocument = { defaultView: { getComputedStyle: element => ({ overflowY: element.overflowY }), requestAnimationFrame: callback => setImmediate(callback) } }; }
+    createEl(tag, options) { const el = new Element(tag, options); this.children.push(el); el.parentElement = this; if (this.tag === 'select' && this.children.length === 1) this.value = el.value; return el; }
+    addEventListener(name, handler) { this[name] = handler; }
+    removeEventListener(name) { delete this[name]; }
     createDiv(options) { return this.createEl('div', options); }
     createSpan(options) { return this.createEl('span', options); }
     empty() { this.children = []; }
@@ -52,6 +54,7 @@ class Element {
     assert.equal(toggle.attributes['aria-pressed'], 'false');
     assert.equal(api.stateManager().selectedMonth, '10');
     files['2026'].months[1].history = Array.from({ length: 205 }, (_, i) => op('row-' + i, '2026-01-01', '1'));
+    search.value = ''; search.oninput(); await flush();
     const fullRoot = new Element('div'); await api.showHistorySearch(fullRoot, renderer);
     const more = fullRoot.all().find(el => el.textContent === 'Show more');
     const fullSearch = fullRoot.find('Search operations');
@@ -66,10 +69,64 @@ class Element {
     fullSearch.value = ''; fullSearch.oninput(); await flush(); assert.equal(shown.length, 100); assert.equal(more.hidden, false);
     fullToggle.onclick(); assert.equal(more.hidden, true); await flush(); assert.equal(shown.length, 0);
     fullToggle.onclick(); await flush(); assert.equal(shown.length, 100);
+    // Reopening after editing reloads data while restoring the current search.
+    fullSearch.value = 'Coffee'; fullSearch.oninput(); await flush();
+    more.onclick(); await flush();
+    const body = fullRoot.children[0];
+    body.scrollTop = 700;
+    body.scroll({ currentTarget: body });
+    assert.equal(api.stateManager().historySearch.scrollTop, 700);
+    assert.equal(api.stateManager().historySearch.visibleOperationCount, 200);
+
+    files['2026'].months[1].history[0].comment = 'Edited note';
+    files['2026'].months[1].history.splice(1, 1);
+    const restoredRoot = new Element('div');
+    await api.showHistorySearch(restoredRoot, renderer);
+    assert.equal(restoredRoot.find('Search operations').value, 'Coffee');
+    assert.equal(restoredRoot.find('Search all history').attributes['aria-pressed'], 'true');
+    assert.equal(shown.length, 200);
+    assert(!shown.some(operation => operation.id === 'row-0' || operation.id === 'row-1'));
+    assert.equal(restoredRoot.children[0].scrollTop, 700);
+
+    const shortenedRoot = new Element('div');
+    await api.showHistorySearch(shortenedRoot, async (container, loader) => {
+        await renderer(container, loader);
+        shortenedRoot.children[0].scrollHeight = 650;
+    });
+    assert.equal(shortenedRoot.children[0].scrollTop, 150, 'restoration clamps to the shorter list');
+
+    // In Obsidian the scrollable element can be outside the history body.
+    const outerRoot = new Element('div');
+    await api.showHistorySearch(outerRoot, async (container, loader) => {
+        await renderer(container, loader);
+        outerRoot.children[0].scrollHeight = 500;
+    });
+    outerRoot.scrollTop = 800;
+    outerRoot.scroll({ currentTarget: outerRoot });
+    assert.equal(api.stateManager().historySearch.scrollTop, 800);
+    const reopenedOuterRoot = new Element('div');
+    await api.showHistorySearch(reopenedOuterRoot, async (container, loader) => {
+        await renderer(container, loader);
+        reopenedOuterRoot.children[0].scrollHeight = 500;
+    });
+    assert.equal(reopenedOuterRoot.scrollTop, 800, 'restore the ancestor that actually scrolls');
+    assert.equal(reopenedOuterRoot.children[0].scrollTop, 0);
+
+    api.stateManager({ selectedMonth: '9' });
+    assert.deepEqual(api.stateManager().historySearch, {
+        query: 'Coffee', globalSearchEnabled: true, visibleOperationCount: 100, scrollTop: 0,
+    });
+    api.stateManager({ selectedMonth: '10', selectedCurrency: 'EUR' });
+    assert.equal(api.stateManager().historySearch.query, 'Coffee');
+    assert.equal(api.stateManager().historySearch.scrollTop, 0);
+    api.stateManager({ selectedCurrency: 'USD', historySearch: {
+        query: '', globalSearchEnabled: false, visibleOperationCount: 100, scrollTop: 0,
+    } });
     files['2026'].months[1].history = files['2026'].months[1].history.slice(0, 99);
     const exactRoot = new Element('div'); await api.showHistorySearch(exactRoot, renderer);
     exactRoot.find('Search all history').onclick(); await flush(); assert.equal(shown.length, 100);
     assert.equal(exactRoot.all().find(el => el.textContent === 'Show more').hidden, true);
+    exactRoot.find('Search all history').onclick(); await flush();
     files['2026'].months[10].history = Array.from({ length: 120 }, (_, i) => op('month-' + i, '2026-10-01', '1'));
     const monthRoot = new Element('div'); await api.showHistorySearch(monthRoot, renderer); assert.equal(shown.length, 120);
     assert.equal(monthRoot.all().find(el => el.textContent === 'Show more').hidden, true);

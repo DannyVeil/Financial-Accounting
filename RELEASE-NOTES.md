@@ -1,19 +1,18 @@
-# Financial Accounting 1.0.6
+# Financial Accounting 1.0.7
 
-## Global History Search
+## Preserve History Search Context
 
-- Added **All history** beside the search field to find operations across every recorded year, including personal notes from previous years.
-- Search by note, account, category, amount, or transaction type in the selected currency. Switch back to the selected month without losing your query.
-- Search is now available even when the selected month has no operations.
-- Global results load in groups of 100. **Show more** appears only while additional matches remain; monthly history continues to display all results.
-- Fixed editing and deletion of operations found in other months so changes apply to the original period. Editing older date-only records preserves their date format.
-- Added year labels to history dates and styled **Show more** with the theme's accent color and spacing above the button.
+- Return from an operation without losing your search text, **All history** mode, or expanded results.
+- Restore your scroll position after returning from editing or deleting an operation, including when the outer Obsidian panel handles scrolling.
+- Reload results on return so edits and deletions are reflected immediately. If the list becomes shorter, the restored position stays within the available content.
+- Reset scrolling and the global result limit to 100 when switching the month or currency, while retaining your query and search mode.
+- Keep search context in memory for the current plugin session without writing interface state to financial data or settings.
 
 Requires **Obsidian 1.8.0 or later**. No data migration is required. The backup format remains unchanged.
 
 ## Release files
 
-Publish these files from `dist` under the tag `1.0.6`:
+Create the GitHub Release with tag `1.0.7` and attach these files from `dist` directly as release assets:
 
 - `main.js`
 - `manifest.json`
@@ -21,4 +20,4 @@ Publish these files from `dist` under the tag `1.0.6`:
 - `LICENSE-TWEMOJI.txt`
 - `TWEMOJI-NOTICE.md`
 
-Do not include `db/`, `data.json`, or personal backup files.
+Committing the files to the repository is not sufficient for release installation or automated release checks. Do not include `db/`, `data.json`, or personal backup files.
